@@ -40,9 +40,9 @@ public class EntranceActivity extends AppCompatActivity {
     private static String url_rtc = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
     private static String chain = "websocket";
     private static String chain_rtc = "rtc";
-    private static String workspaceId = "YOUR_WORKSPACE_ID";
-    private static String apiKey = "YOUR_API_KEY";
-    private static String appId = "YOUR_APP_ID";
+    private static String workspaceId = "llm-2d2jbauuwkp1250n";
+    private static String apiKey = "sk-cebc306c1a7d44579af8d99c199789a2";
+    private static String appId = "ddc2509a3d01433f876f50c1fc4c0865";
     private static String vqaImgLink = "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png";
 
 
@@ -57,13 +57,13 @@ public class EntranceActivity extends AppCompatActivity {
 
     private EditText appidView;
 //    private CheckBox cbType ;
-    private boolean isWs = true;
+    private boolean isWs = true; //默认websocket
     private boolean isAudio = true;
 
 
     private String[] permissions = new String[]{
             permission.RECORD_AUDIO,
-            permission.CAMERA,
+            // permission.CAMERA, //如需视频能力，打开此权限. 测试机没有相机
             permission.WRITE_EXTERNAL_STORAGE,
             permission.ACCESS_COARSE_LOCATION
     };
@@ -178,32 +178,65 @@ public class EntranceActivity extends AppCompatActivity {
             return;
         }
 
-        if (ContextCompat.checkSelfPermission(this, permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{permission.CAMERA}, PERMISSION_REQUEST_CODE);
-        }
+//        if (ContextCompat.checkSelfPermission(this, permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+//            requestPermissions(new String[]{permission.CAMERA}, PERMISSION_REQUEST_CODE);
+//        }
 
+    }
+
+    // 方便把权限名转成更友好的中文提示
+    private String prettyPermissionName(String perm) {
+        if (permission.RECORD_AUDIO.equals(perm)) return "麦克风";
+        // if (permission.CAMERA.equals(perm)) return "相机";
+        if (permission.ACCESS_COARSE_LOCATION.equals(perm)) return "位置";
+        if (permission.WRITE_EXTERNAL_STORAGE.equals(perm)) return "存储";
+        return perm;
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-//        if (requestCode == PERMISSION_REQUEST_CODE && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-//            launchVideoChat();
-//        }
 
         if (requestCode == PERMISSION_REQUEST_CODE) {
             boolean allGranted = true;
-            for (int grantResult : grantResults) {
-                if (grantResult != PackageManager.PERMISSION_GRANTED) {
+
+            StringBuilder missing = new StringBuilder();
+            StringBuilder missingForLog = new StringBuilder();
+            boolean hasNeverAskAgain = false;
+
+            // 逐项检查本次回调返回的权限结果
+            for (int i = 0; i < permissions.length; i++) {
+                String perm = permissions[i];
+                int result = (i < grantResults.length) ? grantResults[i] : PackageManager.PERMISSION_DENIED;
+
+                if (result != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false;
-                    break;
+
+                    // UI 提示用
+                    if (missing.length() > 0) missing.append("、");
+                    missing.append(prettyPermissionName(perm));
+
+                    // Log 用
+                    missingForLog.append(perm).append("(").append(prettyPermissionName(perm)).append(") ");
+
+                    // 用户是否勾选了“不再询问”
+                    // 返回 false 代表：不再弹框了（可能是勾选了不再询问 / 或策略不允许）
+                    if (!ActivityCompat.shouldShowRequestPermissionRationale(this, perm)) {
+                        hasNeverAskAgain = true;
+                    }
                 }
             }
+
             if (allGranted) {
                 launchVideoChat();
             } else {
-                Toast.makeText(this, "权限申请失败", Toast.LENGTH_SHORT).show();
+                Log.w(TAG, "Permission denied. Missing: " + missingForLog);
+                String toast = "权限申请失败，缺少：" + (missing.length() == 0 ? "(未知)" : missing);
+                if (hasNeverAskAgain) {
+                    toast += "（已勾选不再询问，请到系统设置里手动开启）";
+                }
+                Toast.makeText(this, toast, Toast.LENGTH_LONG).show();
             }
         }
     }
