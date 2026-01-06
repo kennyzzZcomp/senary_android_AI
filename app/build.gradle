@@ -1,0 +1,90 @@
+plugins {
+    alias(libs.plugins.androidApplication)
+}
+
+android {
+    namespace 'com.tongyi.multimodal_conversation'
+    compileSdk rootProject.ext.android.compileSdk
+
+    defaultConfig {
+        applicationId "com.tongyi.multimodal_conversation"
+        minSdk rootProject.ext.android.minSdk
+        targetSdk rootProject.ext.android.targetSdk
+        versionCode rootProject.ext.android.versionCode
+        versionName rootProject.ext.android.versionName
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            ndk {
+                abiFilters "arm64-v8a","armeabi-v7a"
+            }
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            ndk {
+                abiFilters "arm64-v8a","armeabi-v7a"
+            }
+        }
+    }
+
+    lintOptions {
+        abortOnError false      
+        htmlReport true          
+        htmlOutput file("../lint-report.html")
+        checkReleaseBuilds true 
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    applicationVariants.configureEach { variant ->
+        def formattedDate = new Date().format('yyMMddHHmmss')
+        def fileName = rootProject.ext.android.applicationName + "_V" + defaultConfig.versionName + "_" + formattedDate + "_" // + buildTypeConf + ".apk"
+        if (variant.buildType.name == "debug") {
+            variant.outputs.configureEach {
+                outputFileName = fileName + "debug.apk"
+            }
+        } else if (variant.buildType.name == "release") {
+            variant.outputs.configureEach {
+                outputFileName = fileName + "release.apk"
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation libs.appcompat
+    implementation libs.material
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+    //导入multimodal_dialog_sdk 和voicechat sdk
+    implementation fileTree(dir: 'src/main/libs', include: ['*.aar'])
+    implementation libs.androidbootstrap
+    implementation libs.aliyun.core
+    implementation libs.fastjson
+
+    implementation libs.okhttp
+    implementation libs.okio //Android OKHttp3应用要增加一个收入IO的okio包
+    implementation libs.http.logging.interceptor
+    implementation libs.core.ktx
+
+    //导入视频云sdk
+    implementation libs.alivcsdk.artc
+    //oss云存储
+    implementation libs.oss
+
+}

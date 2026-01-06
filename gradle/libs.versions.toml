@@ -1,0 +1,45 @@
+[versions]
+agp = "8.3.2"
+alivcsdk_artc = "7.6.0"
+androidbootstrap = "2.3.2"
+appcompatV7 = "28.0.1"
+coreKtx = "1.13.1"
+fatAarAndroid = "1.4.1"
+junit = "4.13.2"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+appcompat = "1.7.0"
+kotlinGradlePlugin = "1.8.0"
+material = "1.12.0"
+tyandroid_kit = "1.0.5"
+okhttp = "4.10.0"
+okio = "3.0.0"
+http_logging_interceptor = "4.10.0"
+oss_version = "2.9.19"
+aliyun_core = "3.7.1"
+fastjson = "1.2.83"
+
+
+[libraries]
+alivcsdk-artc = { module = "com.aliyun.aio:AliVCSDK_ARTC", version.ref = "alivcsdk_artc" }
+androidbootstrap = { module = "com.beardedhen:androidbootstrap", version.ref = "androidbootstrap" }
+appcompat-v7 = { module = "com.android.support:appcompat-v7", version.ref = "appcompatV7" }
+core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+fat-aar-android = { module = "com.github.aasitnikov:fat-aar-android", version.ref = "fatAarAndroid" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlinGradlePlugin" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+tyandroid_kit = { module = "com.aliyun.tongyi:tyandroid_kit", version.ref = "tyandroid_kit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
+http_logging_interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "http_logging_interceptor" }
+oss ={group = "com.aliyun.dpa",name = "oss-android-sdk",version.ref = "oss_version"}
+aliyun-core = {group = "com.aliyun",name = "aliyun-java-sdk-core",version.ref = "aliyun_core"}
+fastjson = {group = "com.alibaba",name = "fastjson",version.ref = "fastjson"}
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+

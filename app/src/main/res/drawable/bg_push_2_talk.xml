@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp"/>
+            <solid android:color="@color/black"/>
+        </shape>
+    </item>
+    <item android:state_pressed="false">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <!-- angle:0 从上到下 angle:45 从左到右 angle:90 从下到上 -->
+            <gradient android:angle="45" android:endColor="#49419E" android:startColor="#5E3579" android:type="linear" />
+        </shape>
+    </item>
+
+</selector>
