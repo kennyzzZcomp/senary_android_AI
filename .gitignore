@@ -70,3 +70,6 @@ render.experimental.xml
 mtlbuild/out/
 mtlbuild/localbuild.txt
 mtlbuild/settings.gradle
+
+# readme images
+docs/images/*

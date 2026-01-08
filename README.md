@@ -72,7 +72,7 @@ private static String workspaceId = "your_workspace_id";
 private static String apiKey = "your_app_id";
 private static String appId = "your_api_key_or_token";
 
-# 选项 B：local.properties（默认不提交到仓库） <-- TODO
+# 选项 B：local.properties（默认不提交到仓库） <-- TODO 
 ALIYUN_WORKSPACE_ID=your_workspace_id
 ALIYUN_APP_ID=your_app_id
 ALIYUN_API_KEY=your_api_key_or_token
