@@ -37,4 +37,12 @@ public class Utils {
         int level = (int)((db + 160) * 100 / 160);
         return level;
     }
+    /**
+     * 一个简单的哈希函数，用于生成唯一的闹钟 ID。
+     */
+    public static int generateAlarmId(String time, String date, String content, String repeat) {
+        // 组合关键信息生成哈希值
+        String uniqueString = date + "|" + time + "|" + content + "|" + repeat + "|" + System.currentTimeMillis();
+        return Math.abs(uniqueString.hashCode());
+    }
 }

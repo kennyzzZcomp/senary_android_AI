@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- Android 12+ 申请精确闹钟的特殊访问 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -37,6 +39,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Register alarm receiver -->
+        <receiver
+            android:name="com.tongyi.multimodal_dialog.util.AlarmReceiver"
+            android:exported="false" />
 
     </application>
 

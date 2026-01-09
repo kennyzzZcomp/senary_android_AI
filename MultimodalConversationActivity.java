@@ -30,6 +30,7 @@ import com.alibaba.ty.conv.ConvEvent;
 import com.tongyi.multimodal_conversation.R;
 import com.tongyi.multimodal_dialog.data.MultimodalParams;
 import com.tongyi.multimodal_dialog.data.request.MultiModalRequestParam;
+import com.tongyi.multimodal_dialog.util.AlarmScheduler;
 import com.tongyi.multimodal_dialog.utils.CameraManager;
 import com.tongyi.multimodal_dialog.Constant.TYDebugInfoType;
 import com.tongyi.multimodal_dialog.data.IDialogCallback;
@@ -38,10 +39,8 @@ import com.tongyi.multimodal_dialog.record.IRecorderCallback;
 import com.tongyi.multimodal_dialog.record.TYAudioRecorder;
 import com.tongyi.multimodal_dialog.util.DeviceUtil;
 import com.tongyi.multimodal_dialog.util.ThreadPoolUtil;
-import com.tongyi.multimodal_dialog.utils.NetworkMp3Player;
-import com.tongyi.multimodal_dialog.util.AlarmScheduler;
 import com.tongyi.multimodal_dialog.util.VolumeController;
-import com.tongyi.multimodal_dialog.Utils;
+import com.tongyi.multimodal_dialog.utils.NetworkMp3Player;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -96,10 +95,12 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private long initEndTime;
     private long connectCost = 0;
 
-    private boolean enableKeywordSpotting = true;
+    private boolean enableKeywordSpotting = true; // 开启唤醒功能
+
+
     private boolean lastAsrFinished = false; // 添加这个标志位来跟踪上一次ASR是否已完成
 
-    /////////////////////////////////////// 启动相关 ///////////////////////////////////////
+    /// //////////////////////////////////// 启动相关 ///////////////////////////////////////
 
     public static void launch(AppCompatActivity activity, MultimodalParams authParams) {
         Intent intent = new Intent(activity, MultimodalConversationActivity.class);
@@ -229,11 +230,12 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         multiModalDialog.setDialogTimeout(10 * 1000);
 
         // 启用唤醒，默认唤醒词为"小云小云"
-        if (enableKeywordSpotting){
+        if (enableKeywordSpotting) {
             //如果开启唤醒，那么需要先启动录音
             MultiModalDialog.wsUseInternalVAD = true;
             multiModalDialog.enableKWS(true, false);
         }
+
         multiModalDialog.createConversation(buildRequestParams(), dialogCallback);
     }
 
@@ -246,7 +248,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         multiModalDialog.start(Objects.requireNonNull(authParams.getApiKey()), "");
     }
 
-    /////////////////////////////////////// 对话回调 ///////////////////////////////////////
+    /// //////////////////////////////////// 对话回调 ///////////////////////////////////////
 
     private final IDialogCallback dialogCallback = new IDialogCallback() {
 
@@ -265,6 +267,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
         @Override
         public void onConvStateChangedCallback(@NonNull DialogState state) {
+            Log.d(TAG, "对话状态变更: " + state + " || isExecutingCommand: " + isExecutingCommand);
             currentState = state;
             runOnUiThread(() -> updateStateUI(state));
         }
@@ -293,11 +296,13 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         @Override
         public void onKeyWordSpotted(@NonNull String word, @NonNull Constant.KeyWordsType type) {
             showToast("唤醒: " + word);
+
         }
 
         @Override
         public void onSpeechTimeout(long timeout) {
             Log.d(TAG, "语音超时: " + timeout);
+
         }
 
         @Override
@@ -334,7 +339,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
     };
 
-    /////////////////////////////////////// 事件处理 ///////////////////////////////////////
+    /// //////////////////////////////////// 事件处理 ///////////////////////////////////////
 
     private void handleConversationEvent(ConvEvent event) {
         switch (event.getEventType()) {
@@ -390,22 +395,17 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 // 处理ASR结果的流式显示
                 handleAsrStreamingDisplay(text, finished, messageFrom);
             } else {
-                // AI回复直接显示，但过滤空内容
-                if (text != null && !text.trim().isEmpty()) {
-                    appendLogMessage(messageFrom + ": " + text);
-                }else{
-                    // 请求AI进行回复
-                    //multiModalDialog.requestToRespond("transcript", "请继续说你的要求吧!", null);
-                    return;
-                }
+                // AI回复直接显示
+                appendLogMessage(messageFrom + ": " + text);
             }
         }
     }
 
     /**
      * 处理ASR结果的流式显示
-     * @param text ASR识别文本
-     * @param finished 是否为最终结果
+     *
+     * @param text        ASR识别文本
+     * @param finished    是否为最终结果
      * @param messageFrom 消息来源
      */
     private void handleAsrStreamingDisplay(String text, boolean finished, String messageFrom) {
@@ -489,7 +489,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
     }
 
-    /////////////////////////////////////// UI更新 ///////////////////////////////////////
+    /// //////////////////////////////////// UI更新 ///////////////////////////////////////
 
     private void updateStateUI(DialogState state) {
         String stateMsg;
@@ -550,7 +550,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         scrollLogs.post(() -> scrollLogs.fullScroll(View.FOCUS_DOWN));
     }
 
-    /////////////////////////////////////// 交互处理 ///////////////////////////////////////
+    /// //////////////////////////////////// 交互处理 ///////////////////////////////////////
 
     private void handleInterruptDown() {
         if (!multiModalDialog.isDuplexMode()) {
@@ -558,7 +558,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 Log.d(TAG, "执行打断");
                 audioPlayer.stop(true, false);
                 multiModalDialog.interrupt();
-            }else if (multiModalDialog.isPush2TalkMode()) {
+            } else if (multiModalDialog.isPush2TalkMode()) {
                 //push2talk 模式下，按住说话
                 multiModalDialog.startSpeech();
             }
@@ -572,13 +572,16 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
     }
 
-    /////////////////////////////////////// 命令执行 ///////////////////////////////////////
+    /// //////////////////////////////////// 命令执行 ///////////////////////////////////////
 
     private void executeCommand(String command) {
         Log.d(TAG, "执行命令: " + command);
 
         try {
-            JSONObject commandObj =  new JSONArray(command).getJSONObject(0);
+            JSONObject commandObj = new JSONArray(command).getJSONObject(0);
+            //log
+            Log.d(TAG, "multimodal app command" + commandObj.toString());
+
             if (commandObj.has("name")) {
                 // multimodal app response
                 String cmdName = commandObj.getString("name");
@@ -596,7 +599,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                         executeDefaultCommand();
                         break;
                 }
-            }else if (commandObj.has("id")) {
+            } else if (commandObj.has("id")) {
                 // voice app response
                 String cmdId = commandObj.getString("id");
                 switch (cmdId) {
@@ -606,64 +609,77 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     default:
                         break;
                 }
-            } else if (commandObj.has("function")){
+                // 在大模型设置当中配置好指令后，可以在这里添加对应的指令处理逻辑
+            } else if (commandObj.has("function")) {
+                //Log.d(TAG, "function pack: " + commandObj.toString());
                 // 音量控制功能
                 JSONObject functionObj = commandObj.getJSONObject("function");
                 String functionName = functionObj.getString("name");
-                switch (functionName){
+                switch (functionName) {
+                    // 音量调高功能
+                    case "PLUS_volume": {
+                        // 第一步：获取 arguments 的字符串值
+                        String argumentsStr = functionObj.getString("arguments");
+                        // 第二步：把这个字符串再解析为 JSONObject
+                        JSONObject argumentsObj = new JSONObject(argumentsStr);
+                        // 第三步：获取 amount
+                        int amount = argumentsObj.getInt("amount");
+
+                        VolumeController.adjustByStep(this, amount / 10);
+                        int cur = VolumeController.getCurrent(this);
+                        int max = VolumeController.getMax(this);
+                        Log.d(TAG, "音量调高: " + cur + "/" + max);
+                        runOnUiThread(() -> Toast.makeText(this, "音量已调高(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
+                        break;
+                    }
+                    case "MINUS_volume": {
+                        // 还需从package中获取具体的减小步进值
+                        // 第一步：获取 arguments 的字符串值
+                        String argumentsStr = functionObj.getString("arguments");
+                        // 第二步：把这个字符串再解析为 JSONObject
+                        JSONObject argumentsObj = new JSONObject(argumentsStr);
+                        // 第三步：获取 amount
+                        int amount = argumentsObj.getInt("amount");
+                        VolumeController.adjustByStep(this, -amount / 10);
+                        int cur = VolumeController.getCurrent(this);
+                        int max = VolumeController.getMax(this);
+                        Log.d(TAG, "音量调低: " + cur + "/" + max);
+                        runOnUiThread(() -> Toast.makeText(this, "音量已降低(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
+                        break;
+                    }
                     case "INCREASE_DEFAULT_volume": {
                         // 固定增加音量
                         final int step = 3;
                         VolumeController.adjustByStep(this, step);
-                        // 获取当前音量
+
                         int cur = VolumeController.getCurrent(this);
                         int max = VolumeController.getMax(this);
-                        // DEBUG LOG
                         Log.d(TAG, "音量固定增加(" + step + "): " + cur + "/" + max);
-                        // DEBUG SHOW TOAST
                         runOnUiThread(() -> Toast.makeText(this, "音量已增加" + step + "(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
-                        // 更改运行状态
-                        isExecutingCommand = false;
-                        runOnUiThread(()->updateStateUI(currentState));
-                        //Log.d(TAG, "isExecutingCommand 设置为 : " + isExecutingCommand + " || " + "currentState: " + currentState);
-
-                        // 向服务器发送命令执行完成的反馈
-                        multiModalDialog.requestToRespond("transcript", "音量已增加到 " + cur + "/" + max, null);
+                        // isExecutingCommand = false;
+                        // runOnUiThread(()->updateStateUI(currentState));
+                        // Log.d(TAG, "isExecutingCommand 设置为 : " + isExecutingCommand + " || " + "currentState: " + currentState);
                         break;
                     }
                     case "DECREASE_DEFAULT_volume": {
                         // 固定减少音量
                         final int step = -3;
                         VolumeController.adjustByStep(this, step);
-                        // 获取当前音量
                         int cur = VolumeController.getCurrent(this);
                         int max = VolumeController.getMax(this);
-                        // DEBUG LOG
                         Log.d(TAG, "音量固定减少(" + step + "): " + cur + "/" + max);
-                        // DEBUG SHOW TOAST
                         runOnUiThread(() -> Toast.makeText(this, "音量已减少" + (-step) + "(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
-                        // 更改运行状态
-                        isExecutingCommand = false;
-                        runOnUiThread(()->updateStateUI(currentState));
-                        //Log.d(TAG, "isExecutingCommand 设置为 : " + isExecutingCommand + " || " + "currentState: " + currentState);
-                        
-                        // 向服务器发送命令执行完成的反馈
-                        multiModalDialog.requestToRespond("transcript", "音量已减少到 " + cur + "/" + max, null);
                         break;
                     }
                     case "SET_clock": {
                         // 设置闹钟功能
-                        //Log.d(TAG, "function pack: " + functionObj.toString());
+                        Log.d(TAG, "function pack: " + functionObj.toString());
                         // 此处添加设置闹钟的具体实现
                         handle_setClock(functionObj);
-                        // 更改运行状态
-                        isExecutingCommand = false;
-                        runOnUiThread(()->updateStateUI(currentState));
-                        // 向服务器发送命令执行完成的反馈
-                        multiModalDialog.requestToRespond("transcript", "闹钟设置完成", null);
                         break;
                     }
                     default:
+                        executeDefaultCommand();
                         break;
                 }
             }
@@ -673,11 +689,6 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
     }
 
-    /*
-    handle_setClock: 处理设置闹钟的功能实现
-    functionObj: 包含闹钟设置参数的JSON对象
-    调用AlarmScheduler工具类来调度闹钟
-     */
     private void handle_setClock(JSONObject functionObj) {
         // 解析闹钟设置参数
         try {
@@ -704,7 +715,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             Log.d(TAG, "设置闹钟: 时间=" + time + ", 日期=" + date + ", 内容=" + content + ", 重复=" + repeat);
             // 生成独特的闹钟id
             int alarmId = Utils.generateAlarmId(time, date, content, repeat);
-            //Log.d(TAG, "生成的闹钟ID: " + alarmId);
+            Log.d(TAG, "生成的闹钟ID: " + alarmId);
             // 使用封装的调度工具
             // TODO: 这一部分代码仅用于测试，后续需要修改
             long triggerAtMillis = AlarmScheduler.parseTriggerTimeMillis(date, time);
@@ -725,7 +736,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         if (commandObj.has("function")) {
             //play music in voice app
             JSONObject function = commandObj.getJSONObject("function");
-            if (function.has("arguments")){
+            if (function.has("arguments")) {
                 String arguments = function.getString("arguments");
                 Log.d(TAG, "arguments: " + arguments);
                 JSONArray args = new JSONArray(arguments);
@@ -739,11 +750,11 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     }
                 }
             }
-        }else if (commandObj.has("params")) {
+        } else if (commandObj.has("params")) {
             //play music in multimodal app
             JSONArray params = commandObj.getJSONArray("params");
             Log.d(TAG, "params: " + params.toString());
-            JSONObject param  = (JSONObject) params.get(0);
+            JSONObject param = (JSONObject) params.get(0);
             if (param.has("normValue")) {
                 String musicInfo = param.getString("normValue");
                 playMp3Url(musicInfo);
@@ -753,20 +764,20 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     }
 
     private void playMp3Url(String jsonString) throws JSONException {
-        JSONObject info  = new JSONObject(jsonString);
+        JSONObject info = new JSONObject(jsonString);
         if (info.has("audios")) {
             String audioMp3 = info.getString("audios");
             // play mp3 by url，like  "https://dashscope.oss-cn-beijing.aliyuncs.com/samples/audio/FreePD_mp3s/Miscellaneaous_Chill_mp3/Tahistaeva%20Aeg.mp3"
             final String musicUrl = audioMp3;
             final String musicName = info.getString("songName");
-            networkMp3Player.play(musicUrl, new NetworkMp3Player.OnPlayCallback(){
+            networkMp3Player.play(musicUrl, new NetworkMp3Player.OnPlayCallback() {
                 @Override
                 public void onPlayStart() {
                     Log.d(TAG, "mp3开始播放");
                     // 更新音乐播放UI
                     runOnUiThread(() -> {
                         musicPlayerContainer.setVisibility(View.VISIBLE);
-                        tvMusicInfo.setText("正在播放: "+ musicName);
+                        tvMusicInfo.setText("正在播放: " + musicName);
                         progressMusic.setVisibility(View.VISIBLE);
                     });
                 }
@@ -821,17 +832,17 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     .builder()
                     .build();
             JSONObject imageObject = new JSONObject();
-            try{
+            try {
                 imageObject.put("type", "url");
                 imageObject.put("value", authParams.getVqaImageLink());
                 List<JSONObject> images = new ArrayList<>();
                 images.add(imageObject);
 
                 updateParams.setImages(images);
-            }catch (JSONException e){
+            } catch (JSONException e) {
                 e.printStackTrace();
             }
-            multiModalDialog.requestToRespond("prompt", "",updateParams.getParametersAsJson());
+            multiModalDialog.requestToRespond("prompt", "", updateParams.getParametersAsJson());
             isExecutingCommand = false;
         });
     }
@@ -870,23 +881,44 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         isExecutingCommand = false;
     }
 
+//    private void executeDefaultCommand() {
+//        // 等待进入监听状态
+//        while (currentState != DialogState.DIALOG_LISTENING || currentState != DialogState.DIALOG_IDLE) {
+//            //push2talk 模式下一轮会先流转到 idle 状态。
+//            try {
+//                Thread.sleep(100);
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                return;
+//            }
+//        }
+//
+//        multiModalDialog.requestToRespond("transcript", "执行成功", null);
+//        isExecutingCommand = false;
+//    }
     private void executeDefaultCommand() {
-        // 等待进入监听状态或空闲状态
-        while (currentState != DialogState.DIALOG_LISTENING || currentState != DialogState.DIALOG_IDLE) {
-            //push2talk 模式下一轮会先流转到 idle 状态。
+        // 等待直到进入监听状态或空闲状态
+        while (currentState != DialogState.DIALOG_LISTENING && currentState != DialogState.DIALOG_IDLE) {
             try {
+                // 休眠100毫秒，避免CPU忙等待
+                Log.d(TAG, "查看状态：" + isExecutingCommand + currentState);
                 Thread.sleep(100);
             } catch (InterruptedException e) {
+                // 线程被中断，恢复中断状态并退出
                 Thread.currentThread().interrupt();
                 return;
             }
         }
 
+        // 通知对话系统执行成功
         multiModalDialog.requestToRespond("transcript", "执行成功", null);
+
+        // 标记命令执行结束
         isExecutingCommand = false;
+        Log.d(TAG, "默认命令执行完成，isExecutingCommand设为: " + isExecutingCommand);
     }
 
-    /////////////////////////////////////// 工具方法 ///////////////////////////////////////
+    /// //////////////////////////////////// 工具方法 ///////////////////////////////////////
 
     private Pair<String, Boolean> parseTextDetail(String response) {
         try {
@@ -928,7 +960,6 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
         return null;
     }
-
     private MultiModalRequestParam buildRequestParams() {
 
         MultiModalRequestParam.UpStream.ReplaceWord replaceWord = new MultiModalRequestParam.UpStream.ReplaceWord();
@@ -1136,3 +1167,4 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         });
     }
 }
+

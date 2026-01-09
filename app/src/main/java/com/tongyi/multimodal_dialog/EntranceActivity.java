@@ -17,9 +17,13 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
+import com.google.android.material.navigation.NavigationView;
 import com.tongyi.multimodal_conversation.R;
 import com.tongyi.multimodal_dialog.data.MultimodalParams;
 import com.tongyi.multimodal_dialog.data.request.MultiModalRequestParam;
@@ -73,6 +77,84 @@ public class EntranceActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         DeviceUtil.setStatusBarColor(this);
         setContentView(R.layout.activity_entrance);
+
+        // Drawer / Toolbar 初始化（必须在 setContentView 之后）
+        DrawerLayout drawerLayout = findViewById(R.id.drawer_layout);
+        NavigationView navView = findViewById(R.id.nav_view);
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this,
+                drawerLayout,
+                toolbar,
+                R.string.app_name,
+                R.string.app_name
+        );
+        drawerLayout.addDrawerListener(toggle);
+        toggle.syncState();
+
+        // 三个“房间”的引用：主页 / 配置页 / Fragment页
+        View layoutHome = findViewById(R.id.layout_home);
+        View layoutConfig = findViewById(R.id.layout_config);
+        View fragmentContainer = findViewById(R.id.layout_fragment_container);
+
+        Runnable showHome = () -> {
+            fragmentContainer.setVisibility(View.GONE);
+            layoutHome.setVisibility(View.VISIBLE);
+            layoutConfig.setVisibility(View.GONE);
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setTitle("AI 实验室");
+            }
+        };
+
+        Runnable showConfig = () -> {
+            fragmentContainer.setVisibility(View.GONE);
+            layoutHome.setVisibility(View.GONE);
+            layoutConfig.setVisibility(View.VISIBLE);
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setTitle("参数配置");
+            }
+        };
+        // 切换到fragment的显示, 显示关于页面
+        Runnable showAbout = () -> {
+            layoutHome.setVisibility(View.GONE);
+            layoutConfig.setVisibility(View.GONE);
+            fragmentContainer.setVisibility(View.VISIBLE);
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setTitle("关于");
+            }
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.layout_fragment_container, new AboutFragment())
+                    .commit();
+        };
+
+        // 默认显示主页
+        showHome.run();
+
+        // 侧边栏点击事件：切换显示
+        navView.setNavigationItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.nav_home) {
+                showHome.run();
+                item.setChecked(true);
+            } else if (id == R.id.nav_config) {
+                showConfig.run();
+                item.setChecked(true);
+            } else if (id == R.id.nav_about) {
+                showAbout.run();
+                item.setChecked(true);
+            } else {
+                Toast.makeText(this, item.getTitle(), Toast.LENGTH_SHORT).show();
+            }
+
+            drawerLayout.closeDrawers();
+            return true;
+        });
+
+        // 主页按钮：直接去配置页
+        // findViewById(R.id.btn_go_to_config).setOnClickListener(v -> showConfig.run());
 
         apiKeyView = (EditText) findViewById(R.id.editView2);
         vqaLinkView = (EditText) findViewById(R.id.editView3);
