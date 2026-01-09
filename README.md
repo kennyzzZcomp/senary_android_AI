@@ -51,12 +51,14 @@
 	<br/>
 	<sub>workspaceid 获取</sub>
 </p>
+
 - App ID：在“应用详情”页可见 App ID；如未创建，请先新建应用再获取。
 <p align="center">
 	<img src="docs/images/app-id.png" alt="app id获取" width="400" />
 	<br/>
 	<sub>app id获取</sub>
 </p>
+
 - API Key（或 AK/SK/Token）：在“API 接入/访问凭证/密钥管理”等入口创建；注意首次只显示一次明文，请妥善保存。
 <p align="center">
 	<img src="docs/images/api-key.png" alt="api key获取" width="400" />
