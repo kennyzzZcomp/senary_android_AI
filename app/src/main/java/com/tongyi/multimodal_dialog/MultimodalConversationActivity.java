@@ -42,6 +42,9 @@ import com.tongyi.multimodal_dialog.utils.NetworkMp3Player;
 import com.tongyi.multimodal_dialog.util.AlarmScheduler;
 import com.tongyi.multimodal_dialog.util.VolumeController;
 import com.tongyi.multimodal_dialog.Utils;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -663,6 +666,17 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                         multiModalDialog.requestToRespond("transcript", "闹钟设置完成", null);
                         break;
                     }
+                    case "SET_reminder": {
+                        // 相对时间提醒功能（如：1分钟后提醒、10秒后提醒）
+                        Log.d(TAG, "收到相对时间提醒命令: " + functionObj.toString());
+                        handle_setReminder(functionObj);
+                        // 更改运行状态
+                        isExecutingCommand = false;
+                        runOnUiThread(()->updateStateUI(currentState));
+                        // 向服务器发送命令执行完成的反馈
+                        multiModalDialog.requestToRespond("transcript", "提醒设置完成", null);
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -718,6 +732,119 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
         } catch (JSONException e) {
             Log.e(TAG, "解析闹钟参数失败", e);
+        }
+    }
+
+    /*
+    handle_setReminder: 处理相对时间提醒功能
+    functionObj: 包含提醒参数的JSON对象，如："1分钟后提醒我开会"
+     */
+    private void handle_setReminder(JSONObject functionObj) {
+        try {
+            // 从实际JSON包格式解析：{"arguments":"{\"duration\": \"分钟\", \"content\": \"喝水提醒\"}","name":"SET_reminder"}
+            String argumentsStr = functionObj.getString("arguments");
+            Log.d(TAG, "原始arguments字符串: " + argumentsStr);
+            
+            JSONObject argumentsObj = new JSONObject(argumentsStr);
+            
+            // 解析参数
+            String duration = "";  // 相对时间，如："1分钟"、"30秒"
+            String content = "提醒"; // 提醒内容
+            
+            if (argumentsObj.has("duration")) {
+                duration = argumentsObj.getString("duration");
+            }
+            if (argumentsObj.has("content")) {
+                content = argumentsObj.getString("content");
+            }
+            
+            Log.d(TAG, "解析结果 - 持续时间: '" + duration + "', 内容: '" + content + "'");
+            
+            // 解析时长并设置提醒
+            long delayMillis = parseDuration(duration);
+            if (delayMillis > 0) {
+                // 计算目标时间
+                long triggerTime = System.currentTimeMillis() + delayMillis;
+                
+                // 生成唯一ID
+                int alarmId = Utils.generateAlarmId(duration, "", content, "");
+                
+                // 设置提醒
+                boolean success = AlarmScheduler.scheduleOneShot(this, alarmId, content, triggerTime);
+                
+                if (success) {
+                    String message = String.format("已设置%s后提醒：%s", duration, content);
+                    Log.d(TAG, message);
+                    runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+                } else {
+                    Log.e(TAG, "设置提醒失败");
+                    runOnUiThread(() -> Toast.makeText(this, "设置提醒失败", Toast.LENGTH_SHORT).show());
+                }
+            } else {
+                Log.e(TAG, "无法解析时长: " + duration);
+                runOnUiThread(() -> Toast.makeText(this, "无法识别时间：", Toast.LENGTH_SHORT).show());
+            }
+            
+        } catch (JSONException e) {
+            Log.e(TAG, "解析提醒参数失败", e);
+            runOnUiThread(() -> Toast.makeText(this, "提醒参数解析失败", Toast.LENGTH_SHORT).show());
+        }
+    }
+    
+    // 解析相对时间（如："1分钟"、"30秒"、"2小时"等）
+    private long parseDuration(String duration) {
+        try {
+            Log.d(TAG, "解析时长字符串: " + duration);
+            
+            if (duration == null || duration.trim().isEmpty()) {
+                return 0;
+            }
+            
+            duration = duration.trim();
+            
+            // 匹配数字和单位
+            Pattern pattern = java.util.regex.Pattern.compile("(\\d+)\\s*(秒|分钟|分|小时|时)");
+            Matcher matcher = pattern.matcher(duration);
+            
+            if (matcher.find()) {
+                int number = Integer.parseInt(matcher.group(1));
+                String unit = matcher.group(2);
+                
+                Log.d(TAG, "解析到数字: " + number + ", 单位: " + unit);
+                
+                switch (unit) {
+                    case "秒":
+                        return number * 1000L;
+                    case "分钟":
+                    case "分":
+                        return number * 60 * 1000L;
+                    case "小时":
+                    case "时":
+                        return number * 60 * 60 * 1000L;
+                    default:
+                        Log.e(TAG, "不支持的时间单位: " + unit);
+                        return 0;
+                }
+            } else {
+                // 如果只是单位名称（如"分钟"），默认为1个单位
+                switch (duration) {
+                    case "秒":
+                        return 1000L;
+                    case "分钟":
+                    case "分":
+                        return 60 * 1000L;  // 1分钟
+                    case "小时":
+                    case "时":
+                        return 60 * 60 * 1000L;  // 1小时
+                    default:
+                        Log.e(TAG, "无法解析时长格式: " + duration);
+                        return 0;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "解析时长时发生错误: " + e.getMessage());
+            e.printStackTrace();
+            return 0;
         }
     }
 

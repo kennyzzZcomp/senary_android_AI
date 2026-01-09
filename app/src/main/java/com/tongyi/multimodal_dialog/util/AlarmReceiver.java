@@ -16,6 +16,8 @@ public class AlarmReceiver extends BroadcastReceiver {
         Log.d(TAG, "闹钟触发: id=" + alarmId + ", 内容=" + content);
         Toast.makeText(context, "闹钟到点: " + content, Toast.LENGTH_LONG).show();
         // TODO: 可在此处发通知或启动Activity等
+        // 功能1: 回调AI语音进行播报
+
     }
 }
 
