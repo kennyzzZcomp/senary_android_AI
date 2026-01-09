@@ -72,4 +72,4 @@ mtlbuild/localbuild.txt
 mtlbuild/settings.gradle
 
 # readme images
-docs/images/*
+# docs/images/*
