@@ -224,15 +224,57 @@ case "INCREASE_DEFAULT_volume": {
 ```
 
  - 功能验证：对模型说“音量提高”后，可以成功调节音量大小。
+
  <p align="center">
 	<img src="docs/images/volume-up.png" alt="音量提高示例" width="500" />
 	<br/>
 	<sub>语音指令：音量提高示例</sub>
 </p>
 
+
 2. **事件提醒功能**
 
 事件提醒功能的开发思路与上述相似。首先添加指令类型，编辑指令内容和形式。收到回调包的指令后需要调用`AlarmManager`进行函数具体功能实现。
+
+```java
+    private void executeCommand(String command) {
+        Log.d(TAG, "执行命令: " + command);
+
+        try {
+            JSONObject commandObj =  new JSONArray(command).getJSONObject(0);
+            if (commandObj.has("name")) {
+                // multimodal app response
+                String cmdName = commandObj.getString("name");
+                switch (cmdName) {
+                    case "visual_qa":
+                        executeVQACommand();
+                        break;
+                    case "quit_videochat":
+                        stopVideoMode();
+                        break;
+                    case "play_music":
+                        handleMusicRadioCommand(commandObj);
+                        break;
+                    default:
+                        executeDefaultCommand();
+                        break;
+                }
+            }else if (commandObj.has("id")) {
+                // voice app response
+                String cmdId = commandObj.getString("id");
+                switch (cmdId) {
+                    case "music_radio":
+                        handleMusicRadioCommand(commandObj);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (commandObj.has("function")){
+				// 添加新事件处理
+			}
+		}
+	}
+```
 
  - 功能验证：对模型说“10秒钟后提醒我喝水”后，可以成功调用系统闹钟。
   <p align="center">
@@ -240,6 +282,7 @@ case "INCREASE_DEFAULT_volume": {
 	<br/>
 	<sub>语音指令：事件提醒功能示例</sub>
 </p>
+
 
 3. **意图识别**
 关闭将不再触发调用工具、Agent、联网搜索、对话承接语等基于语义理解的交互功能，适用于低成本、轻量级语音交互场景。
