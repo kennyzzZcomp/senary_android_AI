@@ -45,26 +45,41 @@
 
 获取路径（以控制台实际页面为准）：
 
-- Workspace ID：进入默认业务空间 -> 业务空间详细 ，复制 Workspace ID。
+<details>
+<summary>📷 点击查看/隐藏图片</summary>
 <p align="center">
-	<img src="docs/images/workspaceID.png" alt="workspaceid 获取" width="400" />
+	<img src="docs/images/workspaceID.png" alt="workspaceid 获取" width="500" />
 	<br/>
 	<sub>workspaceid 获取</sub>
 </p>
+</details>
 
-- App ID：在“应用详情”页可见 App ID；如未创建，请先新建应用再获取。
+- Workspace ID：进入默认业务空间 -> 业务空间详细 ，复制 Workspace ID。
+
+
+<details>
+<summary>📷 点击查看/隐藏图片</summary>
 <p align="center">
-	<img src="docs/images/app-id.png" alt="app id获取" width="400" />
+	<img src="docs/images/app-id.png" alt="app id获取" width="500" />
 	<br/>
 	<sub>app id获取</sub>
 </p>
+</details>
 
-- API Key（或 AK/SK/Token）：在“API 接入/访问凭证/密钥管理”等入口创建；注意首次只显示一次明文，请妥善保存。
+- App ID：在“应用详情”页可见 App ID；如未创建，请先新建应用再获取。
+
+
+<details>
+<summary>📷 点击查看/隐藏图片</summary>
 <p align="center">
-	<img src="docs/images/api-key.png" alt="api key获取" width="400" />
+	<img src="docs/images/api-key.png" alt="api key获取" width="500" />
 	<br/>
 	<sub>api key获取</sub>
 </p>
+</details>
+- API Key（或 AK/SK/Token）：在“API 接入/访问凭证/密钥管理”等入口创建；注意首次只显示一次明文，请妥善保存。
+
+
 
 建议存放（Android 工程，二选一）：
 
@@ -84,22 +99,70 @@ ALIYUN_API_KEY=your_api_key_or_token
 ## 2. 初期调试开发记录
 
 ### 2.1 MCP插件功能
- 1. 添加阿里官方插件
- 2. MCP功能
+多模态交互开发套件支持三种插件：`推荐插件、插件广场中的插件、自定义插件`。通过智能体应用或Assistant API调用插件后，大模型将根据用户输入的内容、工具名称以及工具描述来判断是否调用插件下的工具。
+
+ - 如果需要调用工具，大模型会选择合适的工具，应用内部完成工具调用后，会将工具返回结果和用户内容合并后再次输入到大模型，由大模型生成最终结果并输出。
+
+ - 如果无需调用工具，大模型将直接生成结果并输出。
+
+ 1. 添加阿里推荐插件
+ 直接在大模型应用控制台进行勾选。
+  <p align="center">
+	<img src="docs/images/recommand-plugin.png" alt="添加推荐插件" width="400" />
+	<br/>
+	<sub>如何添加推荐插件</sub>
+</p>
+
+ 2. 添加自定义插件 
+ > 通过 SDK 调用，需要在初始化`MultimodelDialog`时，进入`buildRequestParams`函数，在参数中设置插件中指定的变量值。把`"article_index"`与`"your_plugin_code"`改成自定义插件时设定的参数。
+
+ ```java
+ //Java & Android 
+HashMap<String, Object> pluginParams = new HashMap<>();
+pluginParams.put("article_index",2);
+HashMap<String, Object> userDefindParams = new HashMap<>();
+userDefindParams.put("your_plugin_code",pluginParams);
+
+MultiModalRequestParam.BizParams bizParams = MultiModalRequestParam.BizParams
+   .builder()
+   .userDefinedParams(userDefinedParams)
+   .build();
+ ```
+
+ 3. MCP功能
+
+#TODO
+
 ### 2.2 添加外挂知识库
 
 1. **如何添加**
+ 
+ 访问知识库管理控制台：[阿里百炼知识库管理🎛️](https://bailian.console.aliyun.com/?spm=ntm.workbench-commodities-cloud-paydone.0.0.28ae19afdUlZld&tab=app#/knowledge-base)。随后点击创建知识库，按照步骤把提前准备好的知识库文档添加到里面，等待解析完成。解析完成后即可添加知识库到模型中。
+ > 配置知识库具体官方教程：[阿里配置RAG知识库教程🧰](https://www.alibabacloud.com/help/zh/model-studio/rag-knowledge-base)。
+
+2. **检验效果**
+
+ - 在DEMO中添加了SENARY TECH的VS680与ASTRA SDK的相关知识库。添加后可正确回答相关技术数据细节。
+ <p align="center">
+	<img src="docs/images/knowledge-base.png" alt="添加知识库后回复细节" width="300" />
+	<br/>
+	<sub>添加知识库后回复效果</sub>
+</p>
 
 
 ### 2.3 添加阿里官方百炼应用
+儿童故事配有丰富故事库，通过联网搜索和大模型能力补充故事范围。支持用户点播故事内容，可在讲故事中途随时打断，发起故事问答or故事续改写，并在结束问答后无缝衔接原故事进度。
 
 1. **如何添加**
 > 进入应用开发 ➡️ 全部应用 ➡️ 多模态交互开发套件 ➡️ 我的应用 ➡️ 配置应用。点击百炼应用中的`+`。
+
 <p align="center">
-	<img src="docs/images/add-application.png" alt="如何添加百炼应用" width="300" />
-	<br/>
-	<sub>如何添加百炼应用</sub>
+    <img src="docs/images/add-application.png" alt="如何添加百炼应用" width="300" />
+    <br/>
+    <sub>如何添加百炼应用</sub>
 </p>
+
+
 
 2. **检验效果**
 故事模式效果展示，需要先对模型说“打开故事模式”。随后模型会调用故事模式agent，同样的模型声音也会改变。
@@ -173,10 +236,13 @@ case "INCREASE_DEFAULT_volume": {
 
  - 功能验证：对模型说“10秒钟后提醒我喝水”后，可以成功调用系统闹钟。
   <p align="center">
-	<img src="docs/images/event-notice.png" alt="事件提醒功能示例" width="500" />
+	<img src="docs/images/event-notice1.png" alt="事件提醒功能示例" width="500" />
 	<br/>
 	<sub>语音指令：事件提醒功能示例</sub>
 </p>
+
+3. **意图识别**
+关闭将不再触发调用工具、Agent、联网搜索、对话承接语等基于语义理解的交互功能，适用于低成本、轻量级语音交互场景。
 
 ### 2.6 联网搜索功能
 >启用此功能前需要在我的应用 ➡️ 配置应用 ➡️ 大模型控制台处开启"联网搜索"选项。
@@ -226,8 +292,24 @@ if (enableKeywordSpotting){
 如需开启``KWS``也就是key word wake up功能，需要在初始化``MultiModalDialog``的时候使用上述代码。并且把```enableKeywordSpotting```设置为``true``。
 
 
-### 2.8 长期记忆功能
+### 2.8 长期记忆功能 - TODO：TESTING
+1. 携带上下文（多轮对话）
+ - 短期、会话内的记忆。
+ - 存储在单次会话的请求数据中，传递给模型。会话结束或超过轮数后即“遗忘”。
+ - 可以自定义几轮会话。
 
+ <p align="center">
+	<img src="docs/images/context-round.png" alt="设定上下文示例" width="300" />
+	<br/>
+	<sub>自定义上下文示例</sub>
+</p>
+
+2. 长期记忆 -- TODO
+ - 基于对话历史形成专属记忆库，并在后续对话中体现。开启长期记忆后，结合记忆内容进行回复的对话，会增加额外耗时。
+ - 长期存在，可以跨越数天、数月甚至更久的不同对话会话。
+
+
+### TODO LIST:
 1. 语音实时对话 ✔
 2. 外挂知识库 ✔
 3. MCP插件功能 ✔
