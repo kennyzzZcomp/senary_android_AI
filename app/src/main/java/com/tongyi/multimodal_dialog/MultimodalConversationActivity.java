@@ -102,6 +102,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private boolean enableKeywordSpotting = true;
     private boolean lastAsrFinished = false; // 添加这个标志位来跟踪上一次ASR是否已完成
 
+    private boolean vqaUseUrl = true; // VQA命令中是否使用图片URL
+
     /////////////////////////////////////// 启动相关 ///////////////////////////////////////
 
     public static void launch(AppCompatActivity activity, MultimodalParams authParams) {
@@ -184,6 +186,9 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             if (networkMp3Player.isPlaying()) {
                 networkMp3Player.stop();
                 updateMusicPlayerUI(false);
+                isExecutingCommand = false;
+                runOnUiThread(()->updateStateUI(currentState));
+                multiModalDialog.requestToRespond("transcript", "已停止播放音乐。", null);
             }
         });
     }
@@ -301,6 +306,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         @Override
         public void onSpeechTimeout(long timeout) {
             Log.d(TAG, "语音超时: " + timeout);
+            // 语音播报
+            //multiModalDialog.requestToRespond("transcript", "我先离开哦，有事再找我！", null);
         }
 
         @Override
@@ -1224,18 +1231,41 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     /**
      * build images list request
      * */
-    private static JSONArray getMockOSSImage() {
+    // private static JSONArray getMockOSSImage() {
+    //     JSONObject imageObject = new JSONObject();
+    //     JSONArray images = new JSONArray();
+    //     try{
+
+    //         imageObject.put("type", "base64");
+    //         imageObject.put("value", getLocalImageBase64());
+
+    //         images.put(imageObject);
+
+    //     }catch (Exception e){
+    //         e.printStackTrace();
+    //     }
+    //     return images;
+    // }
+
+    /*
+    getLocalImageBase64: 读取本地图片 或 读取预先设置好的url并转换为Base64编码字符串
+    return: JSONArray 图片列表
+    */
+    public static JSONArray getMockOSSImage() {
         JSONObject imageObject = new JSONObject();
         JSONArray images = new JSONArray();
         try{
-
+        if (vqaUseUrl){
+            imageObject.put("type", "url");
+            imageObject.put("value", "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png");
+        }else {
             imageObject.put("type", "base64");
             imageObject.put("value", getLocalImageBase64());
-
-            images.put(imageObject);
+        }
+        images.put(imageObject);
 
         }catch (Exception e){
-            e.printStackTrace();
+        e.printStackTrace();
         }
         return images;
     }

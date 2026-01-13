@@ -39,7 +39,7 @@
 </p>
 
 
-### 1.2 获取 Workspace ID / API Key / App ID（模板）
+### 1.2 获取 Workspace ID / API Key / App ID
 
 > 目标：明确三项关键信息的来源、记录方式与安全存放位置。
 
