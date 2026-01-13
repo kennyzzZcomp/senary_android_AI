@@ -102,7 +102,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private boolean enableKeywordSpotting = true;
     private boolean lastAsrFinished = false; // 添加这个标志位来跟踪上一次ASR是否已完成
 
-    private boolean vqaUseUrl = true; // VQA命令中是否使用图片URL
+    public static boolean vqaUseUrl = true; // VQA命令中是否使用图片URL
 
     /////////////////////////////////////// 启动相关 ///////////////////////////////////////
 
@@ -1231,46 +1231,46 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     /**
      * build images list request
      * */
-    // private static JSONArray getMockOSSImage() {
-    //     JSONObject imageObject = new JSONObject();
-    //     JSONArray images = new JSONArray();
-    //     try{
+     private static JSONArray getMockOSSImage() {
+         JSONObject imageObject = new JSONObject();
+         JSONArray images = new JSONArray();
+         try{
 
-    //         imageObject.put("type", "base64");
-    //         imageObject.put("value", getLocalImageBase64());
+             imageObject.put("type", "base64");
+             imageObject.put("value", getLocalImageBase64());
 
-    //         images.put(imageObject);
+             images.put(imageObject);
 
-    //     }catch (Exception e){
-    //         e.printStackTrace();
-    //     }
-    //     return images;
-    // }
+         }catch (Exception e){
+             e.printStackTrace();
+         }
+         return images;
+     }
 
     /*
     getLocalImageBase64: 读取本地图片 或 读取预先设置好的url并转换为Base64编码字符串
     return: JSONArray 图片列表
     */
-    public static JSONArray getMockOSSImage() {
-        JSONObject imageObject = new JSONObject();
-        JSONArray images = new JSONArray();
-        try{
-        if (vqaUseUrl){
-            imageObject.put("type", "url");
-            imageObject.put("value", "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png");
-        }else {
-            imageObject.put("type", "base64");
-            imageObject.put("value", getLocalImageBase64());
-        }
-        images.put(imageObject);
-
-        }catch (Exception e){
-        e.printStackTrace();
-        }
-        return images;
-    }
-
-    //read local image to base64
+//    public static JSONArray getMockOSSImage() {
+//        JSONObject imageObject = new JSONObject();
+//        JSONArray images = new JSONArray();
+//        try{
+//        if (vqaUseUrl){
+//            imageObject.put("type", "url");
+//            imageObject.put("value", "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png");
+//        }else {
+//            imageObject.put("type", "base64");
+//            imageObject.put("value", getLocalImageBase64());
+//        }
+//        images.put(imageObject);
+//
+//        }catch (Exception e){
+//        e.printStackTrace();
+//        }
+//        return images;
+//    }
+//
+//    //read local image to base64
     private static String getLocalImageBase64(){
         return "";
     }
