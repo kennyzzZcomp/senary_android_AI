@@ -46,7 +46,7 @@ public class EntranceActivity extends AppCompatActivity {
     private static String chain_rtc = "rtc";
     private static String workspaceId = "llm-2d2jbauuwkp1250n";
     private static String apiKey = "sk-cebc306c1a7d44579af8d99c199789a2";
-    private static String appId = "ddc2509a3d01433f876f50c1fc4c0865";
+    private static String appId = "mm_62600140f1b743d7bad25d552b78";
     private static String vqaImgLink = "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png";
 
 
@@ -67,7 +67,7 @@ public class EntranceActivity extends AppCompatActivity {
 
     private String[] permissions = new String[]{
             permission.RECORD_AUDIO,
-            // permission.CAMERA, //如需视频能力，打开此权限. 测试机没有相机
+            permission.CAMERA, //如需视频能力，打开此权限. 测试机没有相机 3
             permission.WRITE_EXTERNAL_STORAGE,
             permission.ACCESS_COARSE_LOCATION
     };
@@ -259,17 +259,17 @@ public class EntranceActivity extends AppCompatActivity {
             requestPermissions(new String[]{permission.ACCESS_COARSE_LOCATION}, PERMISSION_REQUEST_CODE);
             return;
         }
-
-//        if (ContextCompat.checkSelfPermission(this, permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-//            requestPermissions(new String[]{permission.CAMERA}, PERMISSION_REQUEST_CODE);
-//        }
+        // 1
+       if (ContextCompat.checkSelfPermission(this, permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+           requestPermissions(new String[]{permission.CAMERA}, PERMISSION_REQUEST_CODE);
+       }
 
     }
 
     // 方便把权限名转成更友好的中文提示
     private String prettyPermissionName(String perm) {
         if (permission.RECORD_AUDIO.equals(perm)) return "麦克风";
-        // if (permission.CAMERA.equals(perm)) return "相机";
+        if (permission.CAMERA.equals(perm)) return "相机"; // 2
         if (permission.ACCESS_COARSE_LOCATION.equals(perm)) return "位置";
         if (permission.WRITE_EXTERNAL_STORAGE.equals(perm)) return "存储";
         return perm;

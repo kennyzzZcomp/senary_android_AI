@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">通义多模对话</string>
+    <string name="app_name">通义语音应用</string>
     <string name="text_deplex">双工交互</string>
     <string-array name="conv_type">
         <item>duplex</item>

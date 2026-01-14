@@ -89,7 +89,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     // 状态变量
     private volatile DialogState currentState = DialogState.DIALOG_IDLE;
     private boolean isVqaMode = false;
-    private boolean isVideoMode = false;
+    private boolean isVideoMode = false; // 是否处于视频模式
     private boolean isExecutingCommand = false;
     private String dialogId;
     private String taskId;
@@ -352,6 +352,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 handleConversationStarted();
                 break;
             case EVENT_HUMAN_SPEAKING_DETAIL:
+                //Log.d(TAG, "收到人类说话详情");
                 handleSpeakingDetail(event.getResponse(), true);
                 break;
             case EVENT_RESPONDING_DETAIL:
@@ -384,6 +385,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
 
         // 启动视频模式
+        startVideoMode();
+        Log.d(TAG, "当前链路模式: " + authParams.getChainMode());
         if (authParams.getChainMode() == Constant.ChainMode.RTC) {
             startVideoMode();
         }
@@ -599,8 +602,29 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     case "quit_videochat":
                         stopVideoMode();
                         break;
+                    case "increase_volume":
+                    case "increase_volume_default": {
+                        // 新格式：[{"intent_info":{"domain":"general_command","intent":"increase_volume_default"},"name":"increase_volume_default","params":[{"name":"for","value":"系统","normValue":"系统"}]}]
+                        // 固定步进增加音量
+                        final int step = 3;
+                        handle_volume_command(step, commandObj);
+                        break;
+                    }
+                    case "decrease_volume":
+                    case "decrease_volume_default": {
+                        // 新格式：intent decrease_volume_default
+                        final int step = -3;
+                        handle_volume_command(step, commandObj);
+                        break;
+                    }
                     case "play_music":
                         handleMusicRadioCommand(commandObj);
+                        break;
+                    case "music_radio":
+                        handleMusicRadioCommand(commandObj);
+                        break;
+                    case "SET_reminder":
+                        handle_setreminder_multimodel(commandObj);
                         break;
                     default:
                         executeDefaultCommand();
@@ -613,6 +637,10 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     case "music_radio":
                         handleMusicRadioCommand(commandObj);
                         break;
+                    case "tell_story":
+                        // executeDefaultCommand();
+                        Log.d(TAG, "current state" + currentState);
+                        break;
                     default:
                         break;
                 }
@@ -624,41 +652,17 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     case "INCREASE_DEFAULT_volume": {
                         // 固定增加音量
                         final int step = 3;
-                        VolumeController.adjustByStep(this, step);
-                        // 获取当前音量
-                        int cur = VolumeController.getCurrent(this);
-                        int max = VolumeController.getMax(this);
-                        // DEBUG LOG
-                        Log.d(TAG, "音量固定增加(" + step + "): " + cur + "/" + max);
-                        // DEBUG SHOW TOAST
-                        runOnUiThread(() -> Toast.makeText(this, "音量已增加" + step + "(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
-                        // 更改运行状态
-                        isExecutingCommand = false;
-                        runOnUiThread(()->updateStateUI(currentState));
-                        //Log.d(TAG, "isExecutingCommand 设置为 : " + isExecutingCommand + " || " + "currentState: " + currentState);
-
+                        handle_volume_command(step, functionObj);
                         // 向服务器发送命令执行完成的反馈
-                        multiModalDialog.requestToRespond("transcript", "音量已增加到 " + cur + "/" + max, null);
+                        //multiModalDialog.requestToRespond("transcript", "音量已增加到 " + cur + "/" + max, null);
                         break;
                     }
                     case "DECREASE_DEFAULT_volume": {
                         // 固定减少音量
                         final int step = -3;
-                        VolumeController.adjustByStep(this, step);
-                        // 获取当前音量
-                        int cur = VolumeController.getCurrent(this);
-                        int max = VolumeController.getMax(this);
-                        // DEBUG LOG
-                        Log.d(TAG, "音量固定减少(" + step + "): " + cur + "/" + max);
-                        // DEBUG SHOW TOAST
-                        runOnUiThread(() -> Toast.makeText(this, "音量已减少" + (-step) + "(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
-                        // 更改运行状态
-                        isExecutingCommand = false;
-                        runOnUiThread(()->updateStateUI(currentState));
-                        //Log.d(TAG, "isExecutingCommand 设置为 : " + isExecutingCommand + " || " + "currentState: " + currentState);
-                        
+                        handle_volume_command(step, functionObj);
                         // 向服务器发送命令执行完成的反馈
-                        multiModalDialog.requestToRespond("transcript", "音量已减少到 " + cur + "/" + max, null);
+                        //multiModalDialog.requestToRespond("transcript", "音量已减少到 " + cur + "/" + max, null);
                         break;
                     }
                     case "SET_clock": {
@@ -693,6 +697,87 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             isExecutingCommand = false;
         }
     }
+
+    /*
+    音量控制命令处理
+    */
+    private void handle_volume_command(int step, JSONObject commandObj){
+        VolumeController.adjustByStep(this, step);
+        int cur = VolumeController.getCurrent(this);
+        int max = VolumeController.getMax(this);
+        if (step > 0){
+             Log.d(TAG, "音量增加(新格式)(" + step + "): " + cur + "/" + max + "); params=" + (commandObj.has("params") ? commandObj.optJSONArray("params") : null));
+        }else{
+            Log.d(TAG, "音量减少(新格式)(" + (-step) + "): " + cur + "/" + max + "; params=" + (commandObj.has("params") ? commandObj.optJSONArray("params") : null));
+        }
+        runOnUiThread(() -> Toast.makeText(this, "音量已减少" + (-step) + "(" + cur + "/" + max + ")", Toast.LENGTH_SHORT).show());
+        isExecutingCommand = false;
+        runOnUiThread(() -> updateStateUI(currentState));
+        //multiModalDialog.requestToRespond("transcript", "音量已减少到 " + cur + "/" + max, null);
+    }
+
+    /*
+    handle_setreminder_multimodel模式下的相对时间提醒功能：
+    不同模式下包的格式不同。
+    */
+    private void handle_setreminder_multimodel(JSONObject commandObj) {
+        try {
+            // check parameters existence
+            String duration = "";
+            String content = "";
+            String paramsArrStr = commandObj.getString("params");
+            JSONArray paramsStr = new JSONArray(paramsArrStr);
+            for (int i = 0;i<paramsStr.length();i++){
+                JSONObject p = paramsStr.optJSONObject(i);
+                if (p == null) continue;
+                if (p.has("name") && p.getString("name").equals("duration")){
+                    duration = p.getString("value");
+                }
+                if (p.has("name")&&p.getString("name").equals("content")){
+                    content = p.getString("value");
+                }
+            }
+            // JSONObject argumentsObj = new JSONObject(paramsStr);
+
+            // if (argumentsObj.has("duration")) {
+            //     duration = argumentsObj.getString("duration");
+            // }
+            // if(argumentsObj.has("content")){
+            //     content = argumentsObj.getString("content");
+            // }
+            // 这里可以添加设置提醒的具体实现代码
+            Log.d(TAG, "设置提醒: 持续时间=" + duration + ", 内容=" + content);
+            // 解析时长并设置提醒
+            long delayMillis = parseDuration(duration);
+            if (delayMillis > 0) {
+                // 计算目标时间
+                long triggerTime = System.currentTimeMillis() + delayMillis;
+
+                // 生成唯一ID
+                int alarmId = Utils.generateAlarmId(duration, "", content, "");
+
+                // 设置提醒
+                boolean success = AlarmScheduler.scheduleOneShot(this, alarmId, content, triggerTime);
+
+                if (success) {
+                    String message = String.format("已设置%s后提醒：%s", duration, content);
+                    Log.d(TAG, message);
+                    runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+                } else {
+                    Log.e(TAG, "设置提醒失败");
+                    runOnUiThread(() -> Toast.makeText(this, "设置提醒失败", Toast.LENGTH_SHORT).show());
+                }
+            } else {
+                Log.e(TAG, "无法解析时长: " + duration);
+                runOnUiThread(() -> Toast.makeText(this, "无法识别时间：", Toast.LENGTH_SHORT).show());
+            }
+
+        } catch (JSONException e) {
+            Log.e(TAG, "解析提醒参数失败", e);
+            runOnUiThread(() -> Toast.makeText(this, "提醒参数解析失败", Toast.LENGTH_SHORT).show());
+        }
+    }
+
 
     /*
     handle_setClock: 处理设置闹钟的功能实现
@@ -802,57 +887,120 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private long parseDuration(String duration) {
         try {
             Log.d(TAG, "解析时长字符串: " + duration);
-            
+
             if (duration == null || duration.trim().isEmpty()) {
                 return 0;
             }
-            
+
             duration = duration.trim();
-            
-            // 匹配数字和单位
-            Pattern pattern = java.util.regex.Pattern.compile("(\\d+)\\s*(秒|分钟|分|小时|时)");
-            Matcher matcher = pattern.matcher(duration);
-            
-            if (matcher.find()) {
-                int number = Integer.parseInt(matcher.group(1));
-                String unit = matcher.group(2);
-                
+
+            // 优先匹配阿拉伯数字 + 单位
+            Pattern patternDigits = Pattern.compile("(\\d+)\\s*(秒(钟)?|分钟|分|小时|时)");
+            Matcher mDigits = patternDigits.matcher(duration);
+            if (mDigits.find()) {
+                int number = Integer.parseInt(mDigits.group(1));
+                String unit = mDigits.group(2);
                 Log.d(TAG, "解析到数字: " + number + ", 单位: " + unit);
-                
-                switch (unit) {
-                    case "秒":
-                        return number * 1000L;
-                    case "分钟":
-                    case "分":
-                        return number * 60 * 1000L;
-                    case "小时":
-                    case "时":
-                        return number * 60 * 60 * 1000L;
-                    default:
-                        Log.e(TAG, "不支持的时间单位: " + unit);
-                        return 0;
-                }
-            } else {
-                // 如果只是单位名称（如"分钟"），默认为1个单位
-                switch (duration) {
-                    case "秒":
-                        return 1000L;
-                    case "分钟":
-                    case "分":
-                        return 60 * 1000L;  // 1分钟
-                    case "小时":
-                    case "时":
-                        return 60 * 60 * 1000L;  // 1小时
-                    default:
-                        Log.e(TAG, "无法解析时长格式: " + duration);
-                        return 0;
-                }
+                if (unit.startsWith("秒")) return number * 1000L;
+                if (unit.startsWith("分钟") || unit.equals("分")) return number * 60 * 1000L;
+                return number * 60 * 60 * 1000L;
             }
+
+            // 支持中文数字（例如："十秒"、"三分钟"、"两小时"）
+            Pattern patternChinese = Pattern.compile("([零一二两三四五六七八九十百千万]+)\\s*(秒(钟)?|分钟|分|小时|时)");
+            Matcher mChinese = patternChinese.matcher(duration);
+            if (mChinese.find()) {
+                String numStr = mChinese.group(1);
+                int number = chineseNumberToInt(numStr);
+                String unit = mChinese.group(2);
+                Log.d(TAG, "解析到中文数字: " + numStr + " => " + number + ", 单位: " + unit);
+                if (number <= 0) return 0;
+                if (unit.startsWith("秒")) return number * 1000L;
+                if (unit.startsWith("分钟") || unit.equals("分")) return number * 60 * 1000L;
+                return number * 60 * 60 * 1000L;
+            }
+
+            // 如果只是单位名称（如"分钟"或"秒钟"），默认为1个单位
+            String durNoSpace = duration.replaceAll("\\s+", "");
+            switch (durNoSpace) {
+                case "秒":
+                case "秒钟":
+                    return 1000L;
+                case "分钟":
+                case "分":
+                    return 60 * 1000L;  // 1分钟
+                case "小时":
+                case "时":
+                    return 60 * 60 * 1000L;  // 1小时
+                default:
+                    Log.e(TAG, "无法解析时长格式: " + duration);
+                    return 0;
+            }
+
         } catch (Exception e) {
             Log.e(TAG, "解析时长时发生错误: " + e.getMessage());
             e.printStackTrace();
             return 0;
         }
+    }
+
+    // 把中文数字（最多到万级）转换为整数。支持：零一二两三四五六七八九十百千万，例如 "十"=>10、"二十三"=>23、"两"=>2
+    private int chineseNumberToInt(String chinese) {
+        if (chinese == null || chinese.isEmpty()) return 0;
+        int result = 0;
+        int section = 0; // 当前节的值
+        int number = 0; // 当前数字
+
+        for (int i = 0; i < chinese.length(); i++) {
+            char c = chinese.charAt(i);
+            int digit = -1;
+            switch (c) {
+                case '零': digit = 0; break;
+                case '一': digit = 1; break;
+                case '二': case '两': digit = 2; break;
+                case '三': digit = 3; break;
+                case '四': digit = 4; break;
+                case '五': digit = 5; break;
+                case '六': digit = 6; break;
+                case '七': digit = 7; break;
+                case '八': digit = 8; break;
+                case '九': digit = 9; break;
+            }
+
+            if (digit >= 0) {
+                number = digit;
+            } else {
+                // 遇到单位
+                switch (c) {
+                    case '十':
+                        if (number == 0) number = 1;
+                        section += number * 10;
+                        number = 0;
+                        break;
+                    case '百':
+                        if (number == 0) number = 1;
+                        section += number * 100;
+                        number = 0;
+                        break;
+                    case '千':
+                        if (number == 0) number = 1;
+                        section += number * 1000;
+                        number = 0;
+                        break;
+                    case '万':
+                        section = (section + number) * 10000;
+                        result += section;
+                        section = 0;
+                        number = 0;
+                        break;
+                    default:
+                        // 非数字、非单位字符，忽略
+                        break;
+                }
+            }
+        }
+
+        return result + section + number;
     }
 
     private void handleMusicRadioCommand(JSONObject commandObj) throws JSONException {
@@ -979,14 +1127,18 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             videoObj.put("action", "connect");
             videoObj.put("type", "voicechat_video_channel");
 
+            Log.d(TAG, "初始化视频模式参数: " + videoObj.toString());
             List<JSONObject> videos = new ArrayList<>();
             videos.add(videoObj);
 
             updateParams.setBizParams(MultiModalRequestParam.BizParams.builder()
                     .videos(videos).build());
 
+            Log.d(TAG, "启动视频模式参数: " + updateParams.getParametersAsJson().toString());
             multiModalDialog.requestToRespond("prompt", "", updateParams.getParametersAsJson());
             multiModalDialog.setVideoContainer(videoContainer, uiHandler);
+            Log.d(TAG, "启动视频模式");
+            startVideoFrameStreaming();
 
             isVideoMode = true;
             runOnUiThread(() -> videoContainer.setVisibility(View.VISIBLE));
@@ -1078,6 +1230,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                         .build())
                 .upStream(MultiModalRequestParam.UpStream.builder()
                         .asrPostProcessing(Collections.singletonList(replaceWord))
+                        .mode("duplex")
                         .type("AudioAndVideo")
                         .build())
                 .downStream(MultiModalRequestParam.DownStream.builder()
@@ -1208,6 +1361,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         Thread videoStreamingThread = new Thread(() -> {
             try {
                 while ( !Thread.currentThread().isInterrupted()) {
+                    Log.d(TAG, "发送视频帧图片");
                     Thread.sleep(500);
 
                     JSONObject extraObject = new JSONObject();
@@ -1247,31 +1401,10 @@ public class MultimodalConversationActivity extends AppCompatActivity {
          return images;
      }
 
-    /*
-    getLocalImageBase64: 读取本地图片 或 读取预先设置好的url并转换为Base64编码字符串
-    return: JSONArray 图片列表
-    */
-//    public static JSONArray getMockOSSImage() {
-//        JSONObject imageObject = new JSONObject();
-//        JSONArray images = new JSONArray();
-//        try{
-//        if (vqaUseUrl){
-//            imageObject.put("type", "url");
-//            imageObject.put("value", "https://help-static-aliyun-doc.aliyuncs.com/assets/img/zh-CN/7043267371/p909896.png");
-//        }else {
-//            imageObject.put("type", "base64");
-//            imageObject.put("value", getLocalImageBase64());
-//        }
-//        images.put(imageObject);
-//
-//        }catch (Exception e){
-//        e.printStackTrace();
-//        }
-//        return images;
-//    }
-//
+
 //    //read local image to base64
     private static String getLocalImageBase64(){
+        //Log.d(TAG, "获取视频帧图片Base64编码");
         return "";
     }
 
