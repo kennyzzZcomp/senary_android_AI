@@ -131,7 +131,24 @@ MultiModalRequestParam.BizParams bizParams = MultiModalRequestParam.BizParams
 
  3. MCP功能
 
-#TODO
+MCP功能需要自行在大模型服务控制台进行添加，添加后无需在代码进行对接，仅需要开启后云端会自行调用MCP服务。简易DEMO如下图所示。MCP会在云端被调用然后联网搜索内容，最后返回结果。目前仅支持接入阿里官方MCP服务。
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/mcp_list.png" width="360" />
+      <br/>
+      <sub>MCP添加列表</sub>
+    </td>
+    <td align="center">
+      <img src="docs/images/mcp_ans.png" width="360" />
+      <br/>
+      <sub>添加MCP后Agent回复</sub>
+    </td>
+  </tr>
+</table>
+
+
 
 ### 2.2 添加外挂知识库
 
@@ -335,7 +352,7 @@ if (enableKeywordSpotting){
 如需开启``KWS``也就是key word wake up功能，需要在初始化``MultiModalDialog``的时候使用上述代码。并且把```enableKeywordSpotting```设置为``true``。
 
 
-### 2.8 长期记忆功能 - TODO：TESTING
+### 2.8 长期记忆功能
 1. 携带上下文（多轮对话）
  - 短期、会话内的记忆。
  - 存储在单次会话的请求数据中，传递给模型。会话结束或超过轮数后即“遗忘”。
@@ -347,11 +364,33 @@ if (enableKeywordSpotting){
 	<sub>自定义上下文示例</sub>
 </p>
 
-2. 长期记忆 -- TODO
+2. 长期记忆
  - 基于对话历史形成专属记忆库，并在后续对话中体现。开启长期记忆后，结合记忆内容进行回复的对话，会增加额外耗时。
  - 长期存在，可以跨越数天、数月甚至更久的不同对话会话。
 
- ### 2.9 视觉理解功能
+ ### 2.9 视觉理解功能 - TODO
+
+
+ ### 2.10 图片问答能力 
+
+图片问答功能在DEMO测试阶段为上传图片的URL放入`JSONObject`内，再一同打包为`List<JSONObject>`格式，最后调用`updateParams.setImages(images);`进行上传。
+> 在`wbesocket`模式下上传图片后续需要把图片转换为`base64`格式进行上传。
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/cat.png" width="300" />
+      <br/>
+      <sub>图片内容</sub>
+    </td>
+    <td align="center">
+      <img src="docs/images/VQA_Ans.png" width="400" />
+      <br/>
+      <sub>模型回答</sub>
+    </td>
+  </tr>
+</table>
+
 
 #TODO
 
@@ -361,10 +400,10 @@ if (enableKeywordSpotting){
 3. MCP插件功能 ✔
 4. 长期记忆功能 ✔
 5. 事件提醒功能 ✔
-6. 视觉理解功能
+6. 视觉理解功能 - TODO
 7. 设备控制功能 ✔
 8. 联网搜索功能 ✔
-9. 意图识别功能
+9. 意图识别功能 ✔
 
 ---
 
