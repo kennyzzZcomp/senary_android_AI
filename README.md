@@ -391,10 +391,27 @@ MultiModalRequestParam.upStream(MultiModalRequestParam.UpStream.builder()
 
  2. 使用Websocket自行实现自动拍照上传功能进行通话
 
+ > 使用方法为进入语音通话助手后，说“进入视频通话”，如果要退出则说退出视频通话。
+
+ <table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/video_picture.png" width="300" />
+      <br/>
+      <sub>视频内容</sub>
+    </td>
+    <td align="center">
+      <img src="docs/images/video_respond.png" width="400" />
+      <br/>
+      <sub>模型回答</sub>
+    </td>
+  </tr>
+</table>
+
 
  ### 2.10 图片问答能力 
 
-图片问答功能在DEMO测试阶段为上传图片的URL放入`JSONObject`内，再一同打包为`List<JSONObject>`格式，最后调用`updateParams.setImages(images);`进行上传。
+图片问答功能在DEMO测试阶段仅为上传图片的URL放入`JSONObject`内，再一同打包为`List<JSONObject>`格式，最后调用`updateParams.setImages(images);`进行上传。
 > 在`wbesocket`模式下上传图片后续需要把图片转换为`base64`格式进行上传。
 
 <table>
@@ -420,7 +437,7 @@ MultiModalRequestParam.upStream(MultiModalRequestParam.UpStream.builder()
 3. MCP插件功能 ✔
 4. 长期记忆功能 ✔
 5. 事件提醒功能 ✔
-6. 视觉理解功能 - TODO
+6. 视觉理解功能 ✔
 7. 设备控制功能 ✔
 8. 联网搜索功能 ✔
 9. 意图识别功能 ✔
