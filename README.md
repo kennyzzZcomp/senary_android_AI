@@ -369,6 +369,27 @@ if (enableKeywordSpotting){
  - 长期存在，可以跨越数天、数月甚至更久的不同对话会话。
 
  ### 2.9 视觉理解功能 - TODO
+ 视频理解功能支持两种不同的方法进行实现：websocket和RTC。
+
+ 1. 使用官方SDK内置的RTC进行视频通话
+
+代码内部配置：需要将`upstream`配置为duplex与AudioAndVideo模式，具体如下。
+```java
+MultiModalRequestParam.upStream(MultiModalRequestParam.UpStream.builder()
+                        .asrPostProcessing(Collections.singletonList(replaceWord))
+                        .mode("duplex")
+                        .type("AudioAndVideo")
+                        .build())
+```
+接着在初始页面中，把交互链路`ChainMode`设置为RTC。开始通话等待视频投影打开并且通话状态切换到`Listening`后，可以直接进行使用。
+<p align="center">
+	<img src="docs/images/RTC_voice_chat.png" alt="RTC视频理解示例" width="600" />
+	<br/>
+	<sub>RTC视频理解示例</sub>
+</p>
+
+
+ 2. 使用Websocket自行实现自动拍照上传功能进行通话
 
 
  ### 2.10 图片问答能力 
@@ -392,7 +413,6 @@ if (enableKeywordSpotting){
 </table>
 
 
-#TODO
 
 ### TODO LIST:
 1. 语音实时对话 ✔
