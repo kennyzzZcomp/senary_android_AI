@@ -8,9 +8,9 @@
 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!--拍照所需权限-->
-    <!-- <uses-feature
+    <uses-feature
         android:name="android.hardware.camera"
-        android:required="true" /> -->
+        android:required="true" />
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application

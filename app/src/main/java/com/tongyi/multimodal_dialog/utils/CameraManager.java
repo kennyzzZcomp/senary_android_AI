@@ -12,6 +12,7 @@ import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
@@ -19,6 +20,7 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.util.Size;
@@ -34,6 +36,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import android.graphics.SurfaceTexture;
+
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * @program:aiforce
@@ -46,13 +52,10 @@ public class CameraManager {
     private Context context;
     private android.hardware.camera2.CameraManager cameraManager;
     private CameraDevice cameraDevice;
-    private CameraCaptureSession captureSession;
-    private ImageReader imageReader;
     private static CameraManager mInstance = null;
 
     private String path = null;
     private HandlerThread backgroundThread;
-    private Handler backgroundHandler;
     private String cameraId;
     private TakePhotoCallBack mCallBack;
     private int deviceRotationDegrees = 0;//设备旋转角度
@@ -61,6 +64,28 @@ public class CameraManager {
     private CameraCharacteristics mCameraCharacteristics = null;
 //    private int mImageFormat;
     private OperationType mOperationType;
+    private boolean previewing = false;
+    private Surface mPreviewSurface;
+
+    private CaptureRequest.Builder mPreviewRequestBuilder;
+    private ImageReader mPictureImageReader;
+    private ImageReader mPreviewImageReader;
+    private CameraCaptureSession mCaptureSession;
+    // picture and preview sizes
+    private Size mPictureSize;
+    private Size mPreviewSize;
+    // background handler alias used by preview-related APIs
+    private Handler mBackgroundHandler;
+    // optional preview buffer callbacks (kept empty unless preview is used)
+    private final List<Object> mPreviewBufferCallbacks = new ArrayList<>();
+    // UI thread handler and preview dimensions used by startPreview
+    private Handler mUIHandler;
+    private int mPreviewWidth = 0;
+    private int mPreviewHeight = 0;
+    // pending preview surface when startPreview called before camera is opened
+    private SurfaceTexture mPendingPreviewSurfaceTexture;
+    // enable optional preview ImageReader for frame debugging/consumption
+    private boolean mEnablePreviewImageReader = false;
 
     public static CameraManager getInstance() {
         if (mInstance == null) {
@@ -81,7 +106,9 @@ public class CameraManager {
         this.mHeight = height;
         backgroundThread = new HandlerThread("CameraBackground");
         backgroundThread.start();
-        backgroundHandler = new Handler(backgroundThread.getLooper());
+        mBackgroundHandler = new Handler(backgroundThread.getLooper());
+        // UI handler for callbacks to main thread
+        mUIHandler = new Handler(Looper.getMainLooper());
         //初始化时计算设备旋转角度
         try {
             mCameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId);
@@ -89,6 +116,17 @@ public class CameraManager {
             if (!isSupportOutputSize(width, height)) {
                 Log.e(TAG,"The resolution is not supported");
                 return;
+            }
+            // initialize still-picture size (JPEG)
+            mPictureSize = new Size(width, height);
+            // select a supported preview size for SurfaceTexture
+            StreamConfigurationMap map = mCameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map != null) {
+                Size[] previewSizes = map.getOutputSizes(SurfaceTexture.class);
+                mPreviewSize = choosePreviewSize(previewSizes, width, height);
+                Log.d(TAG, "Selected preview size: " + (mPreviewSize != null ? (mPreviewSize.getWidth() + "x" + mPreviewSize.getHeight()) : "null"));
+            } else {
+                mPreviewSize = new Size(width, height);
             }
         } catch (CameraAccessException e) {
             Log.e(TAG, "get deviceRotationDegrees error:" + e.getMessage());
@@ -100,7 +138,8 @@ public class CameraManager {
                 try {
                     if (ActivityCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                         startTime = System.currentTimeMillis();
-                        cameraManager.openCamera(cameraId, stateCallback, null);
+                        // ensure camera callbacks run on background handler to avoid blocking UI
+                        cameraManager.openCamera(cameraId, stateCallback, mBackgroundHandler);
                     } else {
                         ActivityCompat.requestPermissions((FragmentActivity) context, new String[]{Manifest.permission.CAMERA}, 1);
                     }
@@ -111,16 +150,61 @@ public class CameraManager {
         });
     }
 
+    private Size choosePreviewSize(Size[] sizes, int reqW, int reqH) {
+        if (sizes == null || sizes.length == 0) return new Size(reqW, reqH);
+        // Prefer exact match
+        for (Size s : sizes) {
+            if (s.getWidth() == reqW && s.getHeight() == reqH) return s;
+        }
+        // Prefer same aspect ratio and largest area
+        double target = (double) reqW / (double) reqH;
+        Size best = null;
+        double bestDiff = Double.MAX_VALUE;
+        for (Size s : sizes) {
+            double ratio = (double) s.getWidth() / (double) s.getHeight();
+            double diff = Math.abs(ratio - target);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                best = s;
+            } else if (Math.abs(diff - bestDiff) < 1e-3 && best != null) {
+                // tie-breaker: choose larger size
+                if (s.getWidth() * s.getHeight() > best.getWidth() * best.getHeight()) {
+                    best = s;
+                }
+            }
+        }
+        return best != null ? best : sizes[0];
+    }
+
+    public void enablePreviewImageReader(boolean enable) {
+        mEnablePreviewImageReader = enable;
+    }
+
+    public Size getPreviewSize() {
+        if (mPreviewSize != null) return mPreviewSize;
+        return new Size(this.mWidth == 0 ? 640 : this.mWidth, this.mHeight == 0 ? 480 : this.mHeight);
+    }
+
     /**
      * 打开相机拍照
      *
-     * @param width         图片宽度
-     * @param height        图片高度
+     * @param // width         图片宽度
+     * @param // height        图片高度
      * @param operationType 操作类型(支持OperationType.JPG、OperationType.VIDEO)
      * @param callBack
      */
     public void takePicture(OperationType operationType, TakePhotoCallBack callBack) {
-        if (captureSession == null || cameraDevice == null) {
+        // if (captureSession == null || cameraDevice == null) {
+        //     return;
+        // }
+        if (cameraDevice == null) {
+            Log.e(TAG, "拍照失败：cameraDevice 为空！");
+            if (callBack != null) callBack.error("cameraDevice is null");
+            return;
+        }
+        if (mCaptureSession == null) {
+            Log.e(TAG, "拍照失败：captureSession 尚未配置完成！");
+            if (callBack != null) callBack.error("captureSession is null");
             return;
         }
         this.mCallBack = callBack;
@@ -170,8 +254,22 @@ public class CameraManager {
             Log.i(TAG, "camera open time:" + (System.currentTimeMillis() - startTime));
             startTime = System.currentTimeMillis();
             cameraDevice = camera;
-            new Thread(() -> createCameraSession()).start();
-
+            // create default picture session
+            //createCameraSession();
+            // if a preview SurfaceTexture was requested earlier, start preview now
+            if (mPendingPreviewSurfaceTexture != null) {
+                try {
+                    SurfaceTexture st = mPendingPreviewSurfaceTexture;
+                    mPendingPreviewSurfaceTexture = null;
+                    Log.d(TAG, "starting queued preview after camera opened");
+                    startPreview(st);
+                } catch (Exception e) {
+                    Log.e(TAG, "failed to start queued preview", e);
+                }
+            }else{
+                //createCameraSession();
+                Log.d(TAG, "No queued preview to start");
+            }
         }
 
         @Override
@@ -182,6 +280,7 @@ public class CameraManager {
 
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
+            Log.e(TAG," camera error: " + error);
             camera.close();
             cameraDevice = null;
         }
@@ -189,11 +288,20 @@ public class CameraManager {
 
     private void createCameraSession() {
         try {
+            // close any existing session/reader before creating new ones to avoid state conflicts
+            if (mCaptureSession != null) {
+                try { mCaptureSession.close(); } catch (Exception ignored) {}
+                mCaptureSession = null;
+            }
+            if (mPictureImageReader != null) {
+                try { mPictureImageReader.close(); } catch (Exception ignored) {}
+                mPictureImageReader = null;
+            }
             int width = mWidth == 0 ? 640 : mWidth;
             int height = mHeight == 0 ? 480 : mHeight;
-            imageReader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 2); // 设置图片大小和格式
-            imageReader.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler);
-            Surface surface = imageReader.getSurface();
+            mPictureImageReader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 2); // 设置图片大小和格式
+            mPictureImageReader.setOnImageAvailableListener(onImageAvailableListener, mBackgroundHandler);
+            Surface surface = mPictureImageReader.getSurface();
 
             // 创建CaptureRequest.Builder
             CaptureRequest.Builder captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
@@ -245,7 +353,7 @@ public class CameraManager {
              */
             //captureRequestBuilder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, 2);
             // 创建CameraCaptureSession并捕获图像
-            cameraDevice.createCaptureSession(Arrays.asList(surface), sessionStateCallback, backgroundHandler);
+            cameraDevice.createCaptureSession(Arrays.asList(surface), sessionStateCallback, mBackgroundHandler);
             Log.i(TAG, "camera createCameraSession time:" + (System.currentTimeMillis() - startTime));
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -255,7 +363,7 @@ public class CameraManager {
     private final CameraCaptureSession.StateCallback sessionStateCallback = new CameraCaptureSession.StateCallback() {
         @Override
         public void onConfigured(@NonNull CameraCaptureSession session) {
-            captureSession = session;
+            mCaptureSession = session;
         }
 
         @Override
@@ -266,8 +374,8 @@ public class CameraManager {
     public void takePicture() {
         try {
             CaptureRequest.Builder captureRequest = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureRequest.addTarget(imageReader.getSurface());
-            captureSession.capture(captureRequest.build(), captureCallback, null);
+            captureRequest.addTarget(mPictureImageReader.getSurface());
+            mCaptureSession.capture(captureRequest.build(), captureCallback, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -279,6 +387,27 @@ public class CameraManager {
             super.onCaptureCompleted(session, request, result);
             Log.d(TAG, "图片已捕获");
             //closeCamera(); // 捕获完成后关闭相机
+        }
+    };
+
+    // lightweight preview capture callback to log frame callbacks
+    private final CameraCaptureSession.CaptureCallback mPreviewCaptureCallback = new CameraCaptureSession.CaptureCallback() {
+        @Override
+        public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+            super.onCaptureStarted(session, request, timestamp, frameNumber);
+            Log.v(TAG, "preview onCaptureStarted ts=" + timestamp + " frame=" + frameNumber + " thread=" + Thread.currentThread().getName());
+        }
+
+        @Override
+        public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+            super.onCaptureCompleted(session, request, result);
+            Log.v(TAG, "preview onCaptureCompleted thread=" + Thread.currentThread().getName());
+        }
+
+        @Override
+        public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
+            super.onCaptureFailed(session, request, failure);
+            Log.w(TAG, "preview onCaptureFailed reason=" + failure.getReason() + " frame=" + failure.getFrameNumber());
         }
     };
 
@@ -390,17 +519,17 @@ public class CameraManager {
 
 
     private void closeCamera() {
-        if (null != captureSession) {
-            captureSession.close();
-            captureSession = null;
+        if (null != mCaptureSession) {
+            mCaptureSession.close();
+            mCaptureSession = null;
         }
         if (null != cameraDevice) {
             cameraDevice.close();
             cameraDevice = null;
         }
-        if (null != imageReader) {
-            imageReader.close();
-            imageReader = null;
+        if (null != mPictureImageReader) {
+            mPictureImageReader.close();
+            mPictureImageReader = null;
         }
     }
 
@@ -410,7 +539,7 @@ public class CameraManager {
             backgroundThread.interrupt();
             backgroundThread.quitSafely();
             backgroundThread = null;
-            backgroundHandler = null;
+            mBackgroundHandler = null;
         }
     }
 
@@ -433,6 +562,10 @@ public class CameraManager {
                 if (facing != null) {
                     return cameraId;
                 }
+//                if (facing == CameraCharacteristics.LENS_FACING_EXTERNAL) {
+//                    Log.d(TAG, "外置摄像头: " + cameraId);
+//                    return cameraId;
+//                }
 
             }
         } catch (CameraAccessException e) {
@@ -538,5 +671,176 @@ public class CameraManager {
         private String desc;
     }
 
-}
+    private boolean isOpen() {
+        return cameraDevice != null;
+    }
 
+    public void startPreview(SurfaceTexture surfaceTexture) {
+        //预留接口，后续支持预览功能
+        Log.d(TAG, "startPreview called; isOpen=" + isOpen() + ", previewing=" + previewing);
+        // if camera not yet opened, save the surfaceTexture and start preview later in onOpened()
+        if (!isOpen()) {
+            mPendingPreviewSurfaceTexture = surfaceTexture;
+            Log.d(TAG, "startPreview queued pending SurfaceTexture");
+            return;
+        }
+        if (previewing) return;
+        previewing = true;
+        Log.d(TAG,"is previewing: " + previewing);
+        // Use the selected preview size for buffer
+        Size ps = getPreviewSize();
+        surfaceTexture.setDefaultBufferSize(ps.getWidth(), ps.getHeight());
+        mPreviewSurface = new Surface(surfaceTexture);
+        initPreviewRequest();
+        createCommonSession();
+    }
+
+    private void initPreviewRequest() {
+        //预留接口，后续支持预览功能
+        if (mPreviewSurface == null) {
+            Log.e(TAG, "initPreviewRequest failed, mPreviewSurface is null");
+            return;
+        }
+        if (!isOpen()) {
+            return;
+        }
+        try{
+            mPreviewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            // 设置连续自动对焦
+            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            // yunxuzidongbaoguang
+            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_LOCK, false);
+            // 设置自动曝光
+            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+            // 设置自动白平衡
+            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO);
+            // 设置预览输出的 Surface
+            mPreviewRequestBuilder.addTarget(mPreviewSurface);
+        }catch (CameraAccessException e){
+            Log.e(TAG, "initPreviewRequest error:" + e.getMessage());
+            e.printStackTrace();
+        }
+
+    }
+
+    private void createCommonSession() {
+        // if an existing session/reader exists, close them first to avoid resource conflicts
+        if (mCaptureSession != null) {
+            try { mCaptureSession.close(); } catch (Exception ignored) {}
+            mCaptureSession = null;
+        }
+        if (mPictureImageReader != null) {
+            try { mPictureImageReader.close(); } catch (Exception ignored) {}
+            mPictureImageReader = null;
+        }
+
+        List<Surface> outputs = new ArrayList<>();
+        // preview output
+        if (mPreviewSurface != null) {
+            Log.d(TAG, "createCommonSession add target mPreviewSurface");
+            outputs.add(mPreviewSurface);
+        }
+        // picture output
+        Size pictureSize = null; // mPictureSize is set during initialization
+        if (pictureSize != null) {
+            Log.d(TAG, "createCommonSession add target mPictureImageReader");
+            mPictureImageReader = ImageReader.newInstance(pictureSize.getWidth(), pictureSize.getHeight(), ImageFormat.JPEG, 1);
+            outputs.add(mPictureImageReader.getSurface());
+        }
+
+        // preview output TODO: CHECK PREVIEW OUTPUT
+        if (mEnablePreviewImageReader) {
+            Log.d(TAG, "createCommonSession add target mPreviewImageReader==========");
+            mPreviewImageReader = ImageReader.newInstance(mPreviewSize.getWidth(), mPreviewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+            mPreviewImageReader.setOnImageAvailableListener(new OnImageAvailableListenerImpl(), mBackgroundHandler);
+            outputs.add(mPreviewImageReader.getSurface());
+            mPreviewRequestBuilder.addTarget(mPreviewImageReader.getSurface());
+        }
+
+        try {
+            Log.d(TAG, "createCommonSession: outputs=" + outputs.size());
+            for (Surface s : outputs) {
+                Log.d(TAG, " createCommonSession output surface: " + s);
+            }
+            // 一个session中，所有CaptureRequest能够添加的target，必须是outputs的子集，所以在创建session的时候需要都添加进来
+            cameraDevice.createCaptureSession(outputs, new CameraCaptureSession.StateCallback() {
+
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    Log.d(TAG, "createCommonSession.onConfigured thread=" + Thread.currentThread().getName());
+                    mCaptureSession = session;
+                    startPreviewED();
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    Log.e(TAG, "ConfigureFailed. session: " + session);
+                    previewing = false;
+                }
+            }, mBackgroundHandler); // handle 传入 null 表示使用当前线程的 Looper
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // simple preview image listener to avoid leaking preview Image objects
+    private class OnImageAvailableListenerImpl implements ImageReader.OnImageAvailableListener {
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            Image image = null;
+            try {
+                image = reader.acquireLatestImage();
+                if (image == null) return;
+                // currently we don't process preview frames here; consuming/closing prevents buffer starvation
+            } catch (Exception e) {
+                Log.e(TAG, "OnImageAvailableListenerImpl error: " + e.getMessage());
+            } finally {
+                if (image != null) {
+                    image.close();
+                }
+            }
+        }
+    }
+
+    private void startPreviewED() {
+        Log.v(TAG, "startPreview");
+        if (mCaptureSession == null || mPreviewRequestBuilder == null) {
+            Log.w(TAG, "startPreview: mCaptureSession or mPreviewRequestBuilder is null");
+            return;
+        }
+        try {
+            // 开始预览，即一直发送预览的请求
+            CaptureRequest captureRequest = mPreviewRequestBuilder.build();
+            /*
+            CHECK
+            */
+            boolean isValid = mPreviewSurface.isValid();
+            if (!isValid) {
+                Log.e(TAG, "检测到尝试向已销毁的 Surface 发送指令！这将导致 HAL 崩溃！");
+                return; 
+            }
+            mCaptureSession.setRepeatingRequest(captureRequest, mPreviewCaptureCallback, mBackgroundHandler);
+            Log.i(TAG, "name:" + Thread.currentThread().getName());
+            // Log.i(TAG, "mCaptureSession: " + mCaptureSession);
+            // ensure preview dimensions are set before notifying UI
+            if (mPreviewSize != null) {
+                mPreviewWidth = mPreviewSize.getWidth();
+                mPreviewHeight = mPreviewSize.getHeight();
+            } else {
+                mPreviewWidth = this.mWidth == 0 ? 640 : this.mWidth;
+                mPreviewHeight = this.mHeight == 0 ? 480 : this.mHeight;
+            }
+            if (mUIHandler != null) {
+                mUIHandler.post(() -> onPreview(mPreviewWidth, mPreviewHeight));
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // stub callback when preview starts; extend to notify listeners as needed
+    private void onPreview(int width, int height) {
+        Log.d(TAG, "onPreview: " + width + "x" + height);
+    }
+
+}

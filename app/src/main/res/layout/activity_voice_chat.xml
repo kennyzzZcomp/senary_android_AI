@@ -4,14 +4,7 @@
     android:id="@+id/rl_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_light">
-
-    <!-- 视频容器 -->
-    <FrameLayout
-        android:id="@+id/video_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone" />
+    android:background="@drawable/bg_chat_gradient">
 
     <!-- 主要内容区域 -->
     <LinearLayout
@@ -20,7 +13,7 @@
         android:layout_height="match_parent"
         android:layout_above="@id/bottom_controls"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
         <!-- 对话日志区域 -->
         <LinearLayout
@@ -28,10 +21,9 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginBottom="8dp"
-            android:background="@color/background_light"
-            android:elevation="4dp"
+            android:background="@android:color/transparent"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="0dp">
 
             <!-- 对话日志标题栏 -->
             <LinearLayout
@@ -45,9 +37,9 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="💬 对话内容"
+                    android:text="对话"
                     android:textColor="@color/text_primary"
-                    android:textSize="16sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <!-- 清除按钮 -->
@@ -55,7 +47,7 @@
                     android:id="@+id/btn_clear_logs"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/rounded_button_blue"
+                    android:background="@drawable/rounded_edittext"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -73,7 +65,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="清除"
-                        android:textColor="@color/black"
+                        android:textColor="@color/text_primary"
                         android:textSize="12sp" />
 
                 </LinearLayout>
@@ -86,8 +78,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:background="@drawable/rounded_edittext"
-                android:padding="12dp"
+                android:background="@android:color/transparent"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
                 android:scrollbars="vertical"
                 android:fadeScrollbars="false">
 
@@ -95,10 +88,10 @@
                     android:id="@+id/tv_logs"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:lineSpacingExtra="4dp"
+                    android:lineSpacingExtra="8dp"
                     android:text="等待对话开始..."
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp"
+                    android:textSize="16sp"
                     android:textIsSelectable="true"
                     android:gravity="top" />
 
@@ -196,27 +189,30 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:elevation="8dp"
+        android:layout_margin="16dp"
+        android:background="@drawable/rounded_edittext"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="16dp">
 
         <!-- 状态显示 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:background="@drawable/rounded_button_gray"
+            android:background="@android:color/transparent"
             android:gravity="center"
             android:orientation="horizontal"
-            android:padding="12dp">
+            android:padding="4dp">
 
             <TextView
                 android:id="@+id/tv_state_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:text="🔄"
-                android:textSize="16sp"
-                android:textColor="@color/black"/>
+                android:text="●"
+                android:textSize="10sp"
+                android:textColor="@color/text_secondary"
+                android:alpha="0.6" />
 
             <TextView
                 android:id="@+id/tv_state"
@@ -224,9 +220,9 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="准备中..."
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:alpha="0.9"
                 android:gravity="center" />
 
         </LinearLayout>
@@ -241,31 +237,30 @@
             <!-- 打断/说话按钮 -->
             <LinearLayout
                 android:id="@+id/btn_interrupt"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/rounded_button_red"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:visibility="invisible">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
                     android:text="🎤"
-                    android:textSize="16sp" />
+                    android:textSize="18sp" />
 
                 <TextView
                     android:id="@+id/tv_interrupt_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
                     android:text="打断"
                     android:textColor="@color/black"
-                    android:textSize="14sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
             </LinearLayout>
@@ -273,35 +268,53 @@
             <!-- 退出按钮 -->
             <LinearLayout
                 android:id="@+id/btn_exit"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/rounded_button_gray"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginStart="16dp"
+                android:background="@drawable/rounded_circle_soft"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
                     android:text="❌"
-                    android:textSize="16sp" />
+                    android:textSize="18sp"
+                    android:alpha="0.8" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
                     android:text="退出"
-                    android:textColor="@color/black"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:alpha="0.85" />
 
             </LinearLayout>
 
         </LinearLayout>
 
     </LinearLayout>
+
+    <!-- 悬浮视频窗口（视频模式显示，不遮挡字幕/日志） -->
+    <FrameLayout
+        android:id="@+id/video_container"
+        android:layout_width="160dp"
+        android:layout_height="120dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_pip_window"
+        android:outlineProvider="background"
+        android:clipToOutline="true"
+        android:clipChildren="true"
+        android:clipToPadding="true"
+        android:padding="2dp"
+        android:elevation="20dp"
+        android:visibility="gone" />
 
 </RelativeLayout>

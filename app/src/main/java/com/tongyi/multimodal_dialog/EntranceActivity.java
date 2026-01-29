@@ -94,56 +94,38 @@ public class EntranceActivity extends AppCompatActivity {
         drawerLayout.addDrawerListener(toggle);
         toggle.syncState();
 
-        // 三个“房间”的引用：主页 / 配置页 / Fragment页
-        View layoutHome = findViewById(R.id.layout_home);
+        // 两个“房间”的引用：配置页 / Fragment页
         View layoutConfig = findViewById(R.id.layout_config);
         View fragmentContainer = findViewById(R.id.layout_fragment_container);
 
-        Runnable showHome = () -> {
-            fragmentContainer.setVisibility(View.GONE);
-            layoutHome.setVisibility(View.VISIBLE);
-            layoutConfig.setVisibility(View.GONE);
-            if (getSupportActionBar() != null) {
-                getSupportActionBar().setTitle("AI 实验室");
-            }
-        };
-
         Runnable showConfig = () -> {
             fragmentContainer.setVisibility(View.GONE);
-            layoutHome.setVisibility(View.GONE);
             layoutConfig.setVisibility(View.VISIBLE);
             if (getSupportActionBar() != null) {
                 getSupportActionBar().setTitle("参数配置");
             }
         };
-        // 切换到fragment的显示, 显示关于页面
-        Runnable showAbout = () -> {
-            layoutHome.setVisibility(View.GONE);
-            layoutConfig.setVisibility(View.GONE);
-            fragmentContainer.setVisibility(View.VISIBLE);
-            if (getSupportActionBar() != null) {
-                getSupportActionBar().setTitle("关于");
-            }
-            getSupportFragmentManager()
-                    .beginTransaction()
-                    .replace(R.id.layout_fragment_container, new AboutFragment())
-                    .commit();
-        };
 
-        // 默认显示主页
-        showHome.run();
+        // 默认显示配置页
+        showConfig.run();
 
         // 侧边栏点击事件：切换显示
         navView.setNavigationItemSelectedListener(item -> {
             int id = item.getItemId();
-            if (id == R.id.nav_home) {
-                showHome.run();
-                item.setChecked(true);
-            } else if (id == R.id.nav_config) {
+            if (id == R.id.nav_config) {
                 showConfig.run();
                 item.setChecked(true);
-            } else if (id == R.id.nav_about) {
-                showAbout.run();
+            } else if (id == R.id.nav_camera_preview) {
+                // 显示相机预览页面（Fragment）
+                fragmentContainer.setVisibility(View.VISIBLE);
+                layoutConfig.setVisibility(View.GONE);
+                if (getSupportActionBar() != null) {
+                    getSupportActionBar().setTitle("相机预览");
+                }
+                getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.layout_fragment_container, new CameraPreviewFragment())
+                        .commit();
                 item.setChecked(true);
             } else {
                 Toast.makeText(this, item.getTitle(), Toast.LENGTH_SHORT).show();

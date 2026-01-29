@@ -7,10 +7,15 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.Pair;
+import android.util.Size;
 import android.view.MotionEvent;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -24,6 +29,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.alibaba.ty.conv.ConvConstants.DialogState;
 import com.alibaba.ty.conv.ConvEvent;
@@ -54,6 +60,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import android.util.Base64;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import java.io.ByteArrayOutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import android.os.Looper;
+
+import android.view.View;
+import android.view.SurfaceView;
+import android.graphics.SurfaceTexture;
 
 /**
  * 多模态对话Activity
@@ -69,8 +87,20 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private ViewGroup btnExit;
     private TextView tvInterruptText;
     private FrameLayout videoContainer;
+    private TextureView cameraTextureView;
     private ScrollView scrollLogs;
     private Handler uiHandler;
+
+    // 防抖：频繁 setText（逐字流式）时合并滚动请求，避免滚动抖动
+    private static final long SCROLL_TO_BOTTOM_DEBOUNCE_MS = 16;
+    @Nullable
+    private Runnable scrollToBottomRunnable;
+
+    private View mainContent;
+    private int mainContentPaddingLeft;
+    private int mainContentPaddingTop;
+    private int mainContentPaddingRight;
+    private int mainContentPaddingBottom;
 
     // 音乐播放控件
     private LinearLayout musicPlayerContainer;
@@ -104,6 +134,13 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
     public static boolean vqaUseUrl = true; // VQA命令中是否使用图片URL
 
+
+    // 视频帧流发送线程及停止控制
+    private Thread videoStreamingThread;
+    private volatile boolean videoStreamingRunning = false;
+    // 唤醒词列表
+    private final JSONArray kwsWords = new JSONArray();
+
     /////////////////////////////////////// 启动相关 ///////////////////////////////////////
 
     public static void launch(AppCompatActivity activity, MultimodalParams authParams) {
@@ -132,7 +169,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_voice_chat);
-        uiHandler = new Handler();
+        uiHandler = new Handler(Looper.getMainLooper());
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -144,11 +181,36 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         btnExit = findViewById(R.id.btn_exit);
         tvInterruptText = findViewById(R.id.tv_interrupt_text);
         videoContainer = findViewById(R.id.video_container);
+        mainContent = findViewById(R.id.main_content);
         scrollLogs = findViewById(R.id.scroll_logs);
         musicPlayerContainer = findViewById(R.id.music_player_container);
         tvMusicInfo = findViewById(R.id.tv_music_info);
         btnStopMusic = findViewById(R.id.btn_stop_music);
         progressMusic = findViewById(R.id.progress_music);
+
+        // 任何导致日志区域高度变化的布局过程结束后，自动贴底
+        tvLogs.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                requestScrollToBottom());
+
+        // 初始化滚动 runnable（使用字段，便于 removeCallbacks 做防抖）
+        scrollToBottomRunnable = () -> scrollLogs.post(() -> {
+            View child = scrollLogs.getChildAt(0);
+            if (child != null) {
+                int viewportHeight = scrollLogs.getHeight() - scrollLogs.getPaddingTop() - scrollLogs.getPaddingBottom();
+                // 额外留一点余量，避免最后一行因为 lineSpacing/padding 显示不全
+                int bottomSlack = Math.max(1, tvLogs.getLineHeight() / 4);
+                int targetY = Math.max(0, child.getHeight() - viewportHeight + bottomSlack);
+                scrollLogs.scrollTo(0, targetY);
+            } else {
+                scrollLogs.fullScroll(View.FOCUS_DOWN);
+            }
+        });
+
+        // 缓存 main_content 的原始 padding，便于视频模式时增加“安全边距”
+        mainContentPaddingLeft = mainContent.getPaddingLeft();
+        mainContentPaddingTop = mainContent.getPaddingTop();
+        mainContentPaddingRight = mainContent.getPaddingRight();
+        mainContentPaddingBottom = mainContent.getPaddingBottom();
 
         // 设置点击事件
         setupClickListeners();
@@ -236,11 +298,18 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
         multiModalDialog.setDialogTimeout(10 * 1000);
 
+        /*
+        * 添加自定义唤醒词
+        * */
+        JSONObject wakeWord1 = new JSONObject();
+        wakeWord1.put("name", "小云小云");
+        wakeWord1.put("type", "main");
+        kwsWords.put(wakeWord1);
         // 启用唤醒，默认唤醒词为"小云小云"
         if (enableKeywordSpotting){
             //如果开启唤醒，那么需要先启动录音
             MultiModalDialog.wsUseInternalVAD = true;
-            multiModalDialog.enableKWS(true, false);
+            multiModalDialog.enableKWS(true, false, kwsWords);
         }
         multiModalDialog.createConversation(buildRequestParams(), dialogCallback);
     }
@@ -274,7 +343,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         @Override
         public void onConvStateChangedCallback(@NonNull DialogState state) {
             currentState = state;
-            runOnUiThread(() -> updateStateUI(state));
+            runOnUiThread(() -> updateStateUI(currentState));
         }
 
         @Override
@@ -385,7 +454,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         }
 
         // 启动视频模式
-        startVideoMode();
+        //startVideoMode();
         Log.d(TAG, "当前链路模式: " + authParams.getChainMode());
         if (authParams.getChainMode() == Constant.ChainMode.RTC) {
             startVideoMode();
@@ -461,8 +530,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 lastAsrFinished = finished;
             }
 
-            tvLogs.setText(newText);
-            scrollToBottom();
+            setLogsTextStyled(newText);
+            requestScrollToBottom();
         });
     }
 
@@ -554,13 +623,61 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             String currentText = tvLogs.getText().toString();
             String newText = currentText.equals("等待对话开始...") ? message :
                     currentText + "\n" + message;
-            tvLogs.setText(newText);
-            scrollToBottom();
+            setLogsTextStyled(newText);
+            requestScrollToBottom();
         });
     }
 
+    private void setLogsTextStyled(@NonNull String rawText) {
+        // 我：浅色；AI：深色；系统提示（连接成功等）：浅色
+        int userColor = ContextCompat.getColor(this, R.color.text_secondary);
+        int aiColor = ContextCompat.getColor(this, R.color.text_primary);
+        int systemColor = ContextCompat.getColor(this, R.color.text_secondary);
+
+        SpannableStringBuilder ssb = new SpannableStringBuilder(rawText);
+        int length = rawText.length();
+        int lineStart = 0;
+
+        while (lineStart <= length) {
+            int lineEnd = rawText.indexOf('\n', lineStart);
+            if (lineEnd == -1) {
+                lineEnd = length;
+            }
+
+            if (lineEnd > lineStart) {
+                String line = rawText.substring(lineStart, lineEnd);
+                int color = systemColor;
+                if (line.startsWith("我:")) {
+                    color = userColor;
+                } else if (line.startsWith("AI:")) {
+                    color = aiColor;
+                }
+                ssb.setSpan(new ForegroundColorSpan(color), lineStart, lineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+
+            if (lineEnd >= length) {
+                break;
+            }
+            lineStart = lineEnd + 1;
+        }
+
+        tvLogs.setText(ssb);
+    }
+
     private void scrollToBottom() {
-        scrollLogs.post(() -> scrollLogs.fullScroll(View.FOCUS_DOWN));
+        requestScrollToBottom();
+    }
+
+    private void requestScrollToBottom() {
+        if (uiHandler == null || scrollLogs == null) {
+            return;
+        }
+        if (scrollToBottomRunnable == null) {
+            // initializeUI() 之前的兜底（正常不会走到这里）
+            scrollToBottomRunnable = () -> scrollLogs.post(() -> scrollLogs.fullScroll(View.FOCUS_DOWN));
+        }
+        uiHandler.removeCallbacks(scrollToBottomRunnable);
+        uiHandler.postDelayed(scrollToBottomRunnable, SCROLL_TO_BOTTOM_DEBOUNCE_MS);
     }
 
     /////////////////////////////////////// 交互处理 ///////////////////////////////////////
@@ -625,6 +742,9 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                         break;
                     case "SET_reminder":
                         handle_setreminder_multimodel(commandObj);
+                        break;
+                    case "open_videochat":
+                        startVideoMode();
                         break;
                     default:
                         executeDefaultCommand();
@@ -763,6 +883,10 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                     String message = String.format("已设置%s后提醒：%s", duration, content);
                     Log.d(TAG, message);
                     runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+                    // 更改运行状态
+                    isExecutingCommand = false;
+                    runOnUiThread(() -> updateStateUI(currentState));
+                    multiModalDialog.requestToRespond("transcript", "设置成功", null);
                 } else {
                     Log.e(TAG, "设置提醒失败");
                     runOnUiThread(() -> Toast.makeText(this, "设置提醒失败", Toast.LENGTH_SHORT).show());
@@ -1137,23 +1261,141 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             Log.d(TAG, "启动视频模式参数: " + updateParams.getParametersAsJson().toString());
             multiModalDialog.requestToRespond("prompt", "", updateParams.getParametersAsJson());
             multiModalDialog.setVideoContainer(videoContainer, uiHandler);
+            
             Log.d(TAG, "启动视频模式");
-            startVideoFrameStreaming();
+            //startVideoFrameStreaming();
+            
 
             isVideoMode = true;
-            runOnUiThread(() -> videoContainer.setVisibility(View.VISIBLE));
 
+            // 启动视频帧流发送（每 500ms 发送一帧）
+            startVideoFrameStreaming();
+
+            runOnUiThread(() -> {
+                // 显示悬浮窗，并为主内容区域预留空间，避免遮挡任何文字/按钮
+                applyVideoModeSafeInsets(true);
+                videoContainer.setVisibility(View.VISIBLE);
+                videoContainer.removeAllViews();
+
+                // 初始化texture view
+                TextureView textureView = new TextureView(this);
+                cameraTextureView = textureView;
+                textureView.setOpaque(false);
+                // diagnostics: log surface/texture events and view sizes
+                textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                    @Override
+                    public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                        Log.d(TAG, "onSurfaceTextureAvailable: surfaceSize=" + width + "x" + height
+                                + ", textureViewSize=" + textureView.getWidth() + "x" + textureView.getHeight()
+                                + ", containerSize=" + videoContainer.getWidth() + "x" + videoContainer.getHeight());
+                        // 保持与 CameraManager.init(...) 时使用的分辨率一致
+                        Size ps = CameraManager.getInstance().getPreviewSize();
+                        surface.setDefaultBufferSize(ps.getWidth(), ps.getHeight());
+
+                        // 预览居中裁剪显示（PiP小窗更清晰，不拉伸）
+                        textureView.post(() -> applyCenterCropTransform(textureView, ps.getWidth(), ps.getHeight()));
+
+                        CameraManager.getInstance().startPreview(surface);
+                    }
+
+                    @Override
+                    public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                        Log.d(TAG, "onSurfaceTextureSizeChanged: " + width + "x" + height);
+                        Size ps = CameraManager.getInstance().getPreviewSize();
+                        textureView.post(() -> applyCenterCropTransform(textureView, ps.getWidth(), ps.getHeight()));
+                    }
+
+                    @Override
+                    public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                        Log.d(TAG, "onSurfaceTextureDestroyed");
+                        // 停止/释放摄像头预览（CameraManager.destroy 会关闭 session/imageReader）
+                        CameraManager.getInstance().destroy();
+                        return true; // 允许系统释放 SurfaceTextur
+                    }
+
+                    @Override
+                    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+                        // called when a new frame is available to this SurfaceTexture
+                        try {
+                            long ts = surface.getTimestamp();
+                            Log.v(TAG, "onSurfaceTextureUpdated timestamp=" + ts);
+                        } catch (Exception e) {
+                            Log.v(TAG, "onSurfaceTextureUpdated");
+                        }
+                    }
+                });
+                
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                videoContainer.addView(textureView, lp);
+            });
+            
         } catch (JSONException e) {
             Log.e(TAG, "启动视频模式失败", e);
         }
     }
 
+    private void applyVideoModeSafeInsets(boolean enabled) {
+        // 预留出右上角悬浮窗的区域：160dp 宽 + 16dp margin
+        int extraRight = enabled ? dpToPx(176) : 0;
+        mainContent.setPadding(
+                mainContentPaddingLeft,
+                mainContentPaddingTop,
+                mainContentPaddingRight + extraRight,
+                mainContentPaddingBottom
+        );
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private void applyCenterCropTransform(@NonNull TextureView textureView, int contentWidth, int contentHeight) {
+        if (contentWidth <= 0 || contentHeight <= 0) return;
+        int viewWidth = textureView.getWidth();
+        int viewHeight = textureView.getHeight();
+        if (viewWidth <= 0 || viewHeight <= 0) return;
+
+        // Center-crop: 放大并以中心为锚点裁剪，保证画面铺满 view（避免出现背景白边）
+        float viewRatio = (float) viewWidth / (float) viewHeight;
+        float contentRatio = (float) contentWidth / (float) contentHeight;
+
+        float scaleX = 1f;
+        float scaleY = 1f;
+        if (contentRatio > viewRatio) {
+            // 内容更“宽”，放大 X 方向以裁剪左右
+            scaleX = contentRatio / viewRatio;
+        } else {
+            // 内容更“窄”，放大 Y 方向以裁剪上下
+            scaleY = viewRatio / contentRatio;
+        }
+
+        float pivotX = viewWidth / 2f;
+        float pivotY = viewHeight / 2f;
+
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        matrix.setScale(scaleX, scaleY, pivotX, pivotY);
+        textureView.setTransform(matrix);
+    }
+
     private void stopVideoMode() {
         isVideoMode = false;
-        runOnUiThread(() -> videoContainer.setVisibility(View.GONE));
+        runOnUiThread(() -> {
+            applyVideoModeSafeInsets(false);
+            videoContainer.setVisibility(View.GONE);
+            videoContainer.removeAllViews();
+        });
 
-        multiModalDialog.stop();
+        cameraTextureView = null;
+
+        // 停止视频帧流发送线程
+        stopVideoFrameStreaming();
+
+        //multiModalDialog.stop();
         isExecutingCommand = false;
+        runOnUiThread(()->updateStateUI(currentState));
+        // 向服务器发送命令执行完成的反馈
+        multiModalDialog.requestToRespond("transcript", "已退出视频通话", null);
     }
 
     private void executeDefaultCommand() {
@@ -1348,9 +1590,15 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
         CameraManager.getInstance().destroy();
 
+        // 停止视频帧流发送线程（防止后台泄露）
+        stopVideoFrameStreaming();
+
         if (uiHandler != null) {
             uiHandler.removeCallbacksAndMessages(null);
         }
+
+
+
     }
 
     /**
@@ -1358,54 +1606,142 @@ public class MultimodalConversationActivity extends AppCompatActivity {
      * 启动视频帧流，每 500ms 发送一次图片帧
      */
     private void startVideoFrameStreaming() {
-        Thread videoStreamingThread = new Thread(() -> {
+        // 如果已经在运行，则不重复启动
+        if (videoStreamingThread != null && videoStreamingThread.isAlive()) return;
+
+        videoStreamingRunning = true;
+        videoStreamingThread = new Thread(() -> {
             try {
-                while ( !Thread.currentThread().isInterrupted()) {
+                while (videoStreamingRunning && !Thread.currentThread().isInterrupted()) {
                     Log.d(TAG, "发送视频帧图片");
                     Thread.sleep(500);
 
                     JSONObject extraObject = new JSONObject();
                     extraObject.put("images", getMockOSSImage());
 
+                    // 上传
                     multiModalDialog.updateInfo(extraObject);
                 }
             } catch (InterruptedException e) {
+                Log.d(TAG, "视频帧流发送线程被中断", e);
                 Thread.currentThread().interrupt();
             } catch (JSONException e) {
-                throw new RuntimeException(e);
+                Log.d(TAG, "视频帧图片发送失败", e);
+            } finally {
+                videoStreamingRunning = false;
             }
         });
 
         videoStreamingThread.setDaemon(true);
         videoStreamingThread.setName("LiveAI-VideoStreaming");
         videoStreamingThread.start();
+    }
 
+    private void stopVideoFrameStreaming() {
+        if (videoStreamingThread == null) return;
+        // 请求线程停止并中断
+        videoStreamingRunning = false;
+        videoStreamingThread.interrupt();
+        try {
+            videoStreamingThread.join(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        videoStreamingThread = null;
     }
 
     /**
      * build images list request
      * */
-     private static JSONArray getMockOSSImage() {
+    private JSONArray getMockOSSImage() {
          JSONObject imageObject = new JSONObject();
          JSONArray images = new JSONArray();
          try{
-
-             imageObject.put("type", "base64");
-             imageObject.put("value", getLocalImageBase64());
-
-             images.put(imageObject);
-
+             String base64 = getLocalImageBase64();
+             if (base64 != null && !base64.isEmpty()) {
+                 imageObject.put("type", "base64");
+                 imageObject.put("value", base64);
+                 images.put(imageObject);
+             }
          }catch (Exception e){
              e.printStackTrace();
          }
          return images;
      }
 
+    // read local view (videoContainer) to Base64 JPEG
+    private String getLocalImageBase64(){
+        try {
+            final Bitmap[] bmpHolder = new Bitmap[1];
+            final CountDownLatch latch = new CountDownLatch(1);
 
-//    //read local image to base64
-    private static String getLocalImageBase64(){
-        //Log.d(TAG, "获取视频帧图片Base64编码");
-        return "";
+            runOnUiThread(() -> {
+                try {
+                    // Prefer grabbing the actual camera preview frame.
+                    if (cameraTextureView != null
+                            && cameraTextureView.isAvailable()
+                            && cameraTextureView.getWidth() > 0
+                            && cameraTextureView.getHeight() > 0) {
+                        bmpHolder[0] = cameraTextureView.getBitmap();
+                        return;
+                    }
+
+                    // Fallback: draw the container (may not include TextureView content).
+                    if (videoContainer == null) return;
+                    int w = videoContainer.getWidth();
+                    int h = videoContainer.getHeight();
+                    if (w <= 0 || h <= 0) return;
+                    Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                    Canvas canvas = new Canvas(bmp);
+                    videoContainer.draw(canvas);
+                    bmpHolder[0] = bmp;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    latch.countDown();
+                }
+            });
+
+            // wait up to 1s for UI capture
+            latch.await(1, TimeUnit.SECONDS);
+
+            Bitmap bmp = bmpHolder[0];
+            if (bmp == null) return "";
+
+            // Keep payload small (VQA/base64 often has size limits). Scale down if needed.
+            final int maxDim = 480;
+            int bw = bmp.getWidth();
+            int bh = bmp.getHeight();
+            if (bw > 0 && bh > 0) {
+                int larger = Math.max(bw, bh);
+                if (larger > maxDim) {
+                    float scale = (float) maxDim / (float) larger;
+                    int tw = Math.max(1, Math.round(bw * scale));
+                    int th = Math.max(1, Math.round(bh * scale));
+                    Bitmap scaled = Bitmap.createScaledBitmap(bmp, tw, th, true);
+                    if (scaled != bmp) {
+                        bmp.recycle();
+                        bmp = scaled;
+                    }
+                }
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            int quality = 60;
+            bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+            byte[] bytes = baos.toByteArray();
+            // If still large, reduce quality a bit.
+            while (bytes.length > 180 * 1024 && quality > 30) {
+                quality -= 10;
+                baos.reset();
+                bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                bytes = baos.toByteArray();
+            }
+            return Base64.encodeToString(bytes, Base64.NO_WRAP);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
     }
 
     /////////////////////////////////////// 工具方法 ///////////////////////////////////////
@@ -1425,4 +1761,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             }
         });
     }
+
+
 }
+
