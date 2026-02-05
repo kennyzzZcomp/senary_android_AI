@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live2D</title>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+        #stage { width: 100%; height: 100%; }
+        #log { position: absolute; top: 8px; left: 8px; right: 8px; padding: 6px 8px; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; font-family: monospace; border-radius: 6px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="stage"></div>
+    <div id="log">Live2D init...</div>
+
+    <!-- Offline bundle: place these files under assets/live2d/lib/ -->
+    <!-- 1) pixi.min.js (v6.5.8) -->
+    <script src="file:///android_asset/live2d/lib/pixi.min.js"></script>
+    <!-- 2) live2dcubismcore.min.js (Web Cubism Core) -->
+    <script src="file:///android_asset/live2d/lib/live2dcubismcore.min.js"></script>
+    <!-- 3) pixi-live2d-display cubism4 build (v0.4.1): use cubism4.min.js -->
+    <script src="file:///android_asset/live2d/lib/cubism4.min.js"></script>
+    <script>
+        (function() {
+            const logEl = document.getElementById('log');
+            const log = (m) => { logEl.textContent = m; console.log(m); };
+            const hideLog = () => { logEl.style.display = 'none'; };
+
+            window.onerror = function(msg, src, line, col, err) {
+                log(`Error: ${msg} @ ${src}:${line}`);
+            };
+
+            log('Booting...');
+
+            if (!window.PIXI || !PIXI.live2d) {
+                log('PIXI or Live2D plugin not loaded (check cubism4.min.js path)');
+                return;
+            }
+
+            const app = new PIXI.Application({
+                view: null,
+                width: window.innerWidth,
+                height: window.innerHeight,
+                backgroundAlpha: 0,
+                antialias: true,
+                autoDensity: true,
+                resolution: window.devicePixelRatio || 1,
+            });
+            document.getElementById('stage').appendChild(app.view);
+
+            const modelUrl = 'file:///android_asset/Haru/Haru.model3.json';
+
+            log('Loading model...');
+            PIXI.live2d.Live2DModel.from(modelUrl).then(model => {
+                log('Model loaded');
+                hideLog();
+                model.scale.set(0.05);
+                model.anchor.set(0.5, 0.5);
+                model.position.set(app.renderer.width / 2 - 300, app.renderer.height * 0.1 + 40);
+                app.stage.addChild(model);
+
+                // Expose helpers for native side: lip-sync and talk motion
+                let mouthTarget = 0;
+                const lerp = (a, b, t) => a + (b - a) * t;
+                window.setMouthOpen = (v) => {
+                    mouthTarget = Math.min(1, Math.max(0, Number(v) || 0));
+                };
+                window.startTalkMotion = () => {
+                    try { model.motion('TapBody', 1); } catch (e) { console.warn(e); }
+                };
+                window.stopTalkMotion = () => {
+                    try { model.motion('Idle', 0); } catch (e) { console.warn(e); }
+                    mouthTarget = 0;
+                };
+
+                app.ticker.add(() => {
+                    // smooth mouth to avoid jitter; model.update() is called by ticker internally
+                    const current = model.internalModel.coreModel.getParameterValueById('ParamMouthOpenY') || 0;
+                    const next = lerp(current, mouthTarget, 0.25);
+                    model.internalModel.coreModel.setParameterValueById('ParamMouthOpenY', next);
+                });
+
+                window.addEventListener('resize', () => {
+                    app.renderer.resize(window.innerWidth, window.innerHeight);
+                    model.position.set(app.renderer.width / 2 - 300, app.renderer.height * 0.1 + 40);
+                });
+
+            }).catch(err => {
+                log('Live2D 加载失败: ' + err);
+                const msg = document.createElement('div');
+                msg.textContent = 'Live2D 加载失败: ' + err;
+                msg.style.cssText = 'color: white; padding: 12px; font-size: 14px;';
+                document.body.appendChild(msg);
+                console.error(err);
+            });
+        })();
+    </script>
+</body>
+</html>

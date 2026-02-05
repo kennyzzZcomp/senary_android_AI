@@ -71,5 +71,7 @@ mtlbuild/out/
 mtlbuild/localbuild.txt
 mtlbuild/settings.gradle
 
-# readme images
-# docs/images/*
+# Live2D assets
+
+/*/*/assets/robot
+/*/*/assets/Haru
