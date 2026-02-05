@@ -1314,9 +1314,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             multiModalDialog.requestToRespond("prompt", "", updateParams.getParametersAsJson());
             multiModalDialog.setVideoContainer(videoContainer, uiHandler);
             
-            Log.d(TAG, "启动视频模式");
-            //startVideoFrameStreaming();
-            
+            Log.d(TAG, "启动视频模式");      
 
             isVideoMode = true;
 
@@ -1431,7 +1429,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         textureView.setTransform(matrix);
     }
 
-    ////////// Live2D lip-sync helpers //////////
+    ////////// Live2D 传递指令函数 //////////
     private void triggerLive2DTalkStart() {
         evalLive2DJs("window.startTalkMotion && window.startTalkMotion();");
     }
@@ -1454,6 +1452,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         runOnUiThread(() -> live2dWebView.evaluateJavascript(js, null));
     }
 
+    // 视频窗口拖动功能
     @SuppressLint("ClickableViewAccessibility")
     private void enableVideoDrag() {
         if (videoContainer == null) return;
@@ -1788,6 +1787,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         videoStreamingThread = null;
     }
 
+
+    ////////////////////////////////////////////////// 图像处理 ///////////////////////////////////////
     /**
      * build images list request
      * */

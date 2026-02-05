@@ -54,6 +54,7 @@
             log('Loading model...');
             PIXI.live2d.Live2DModel.from(modelUrl).then(model => {
                 log('Model loaded');
+                // 隐藏日志
                 hideLog();
                 model.scale.set(0.05);
                 model.anchor.set(0.5, 0.5);
