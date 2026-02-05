@@ -19,12 +19,17 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.RelativeLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -50,6 +55,7 @@ import com.tongyi.multimodal_dialog.util.VolumeController;
 import com.tongyi.multimodal_dialog.Utils;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.Locale;
 
 
 import org.json.JSONArray;
@@ -63,6 +69,7 @@ import java.util.Objects;
 import android.util.Base64;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -86,6 +93,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private ViewGroup btnInterrupt;
     private ViewGroup btnExit;
     private TextView tvInterruptText;
+    private FrameLayout live2dContainer;
+    private WebView live2dWebView;
     private FrameLayout videoContainer;
     private TextureView cameraTextureView;
     private ScrollView scrollLogs;
@@ -180,6 +189,11 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         btnInterrupt = findViewById(R.id.btn_interrupt);
         btnExit = findViewById(R.id.btn_exit);
         tvInterruptText = findViewById(R.id.tv_interrupt_text);
+        live2dContainer = findViewById(R.id.live2d_container);
+        live2dWebView = findViewById(R.id.live2d_webview);
+        if (live2dWebView != null) {
+            live2dWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        }
         videoContainer = findViewById(R.id.video_container);
         mainContent = findViewById(R.id.main_content);
         scrollLogs = findViewById(R.id.scroll_logs);
@@ -211,6 +225,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         mainContentPaddingTop = mainContent.getPaddingTop();
         mainContentPaddingRight = mainContent.getPaddingRight();
         mainContentPaddingBottom = mainContent.getPaddingBottom();
+
+        setupLive2DWebView();
 
         // 设置点击事件
         setupClickListeners();
@@ -448,6 +464,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         appendLogMessage("对话准备完成，耗时: " + readyTime + "ms");
 
         runOnUiThread(() -> updateUIState("请开始说话"));
+        runOnUiThread(this::showLive2DCharacter);
 
         if (multiModalDialog.isPush2TalkMode()) {
             runOnUiThread(() -> btnInterrupt.setVisibility(View.VISIBLE));
@@ -616,6 +633,41 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
     private void updateUIState(String message) {
         runOnUiThread(() -> tvState.setText(message));
+    }
+
+    private void setupLive2DWebView() {
+        if (live2dWebView == null) {
+            return;
+        }
+        WebSettings settings = live2dWebView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        live2dWebView.setBackgroundColor(Color.TRANSPARENT);
+        live2dWebView.setWebViewClient(new WebViewClient());
+        live2dWebView.setWebChromeClient(new WebChromeClient(){
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                Log.d(TAG, "Live2D WebView: " + consoleMessage.message() + " @" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber());
+                return super.onConsoleMessage(consoleMessage);
+            }
+        });
+        WebView.setWebContentsDebuggingEnabled(true);
+        // 预先加载，进入对话后直接显示
+        live2dWebView.loadUrl("file:///android_asset/live2d/live2d.html");
+    }
+
+    private void showLive2DCharacter() {
+        if (live2dContainer == null || live2dWebView == null) {
+            return;
+        }
+        live2dContainer.setVisibility(View.VISIBLE);
+        live2dWebView.onResume();
     }
 
     private void appendLogMessage(String message) {
@@ -1276,6 +1328,8 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 applyVideoModeSafeInsets(true);
                 videoContainer.setVisibility(View.VISIBLE);
                 videoContainer.removeAllViews();
+                enableVideoDrag();
+                
 
                 // 初始化texture view
                 TextureView textureView = new TextureView(this);
@@ -1336,13 +1390,12 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     }
 
     private void applyVideoModeSafeInsets(boolean enabled) {
-        // 预留出右上角悬浮窗的区域：160dp 宽 + 16dp margin
-        int extraRight = enabled ? dpToPx(176) : 0;
+        // 悬浮窗不再挤压主内容，保持原始 padding
         mainContent.setPadding(
-                mainContentPaddingLeft,
-                mainContentPaddingTop,
-                mainContentPaddingRight + extraRight,
-                mainContentPaddingBottom
+            mainContentPaddingLeft,
+            mainContentPaddingTop,
+            mainContentPaddingRight,
+            mainContentPaddingBottom
         );
     }
 
@@ -1376,6 +1429,78 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         android.graphics.Matrix matrix = new android.graphics.Matrix();
         matrix.setScale(scaleX, scaleY, pivotX, pivotY);
         textureView.setTransform(matrix);
+    }
+
+    ////////// Live2D lip-sync helpers //////////
+    private void triggerLive2DTalkStart() {
+        evalLive2DJs("window.startTalkMotion && window.startTalkMotion();");
+    }
+
+    private void triggerLive2DTalkStop() {
+        evalLive2DJs("window.stopTalkMotion && window.stopTalkMotion(); window.setMouthOpen && window.setMouthOpen(0);");
+    }
+
+    private void updateLive2DMouth(int level) {
+        // Map integer level to 0..1; adjust divisor if needed based on actual levels
+        float normalized = Math.max(0f, Math.min(1f, level / 100f));
+        String js = String.format(Locale.US,
+                "window.setMouthOpen && window.setMouthOpen(%.3f);",
+                normalized);
+        evalLive2DJs(js);
+    }
+
+    private void evalLive2DJs(@NonNull String js) {
+        if (live2dWebView == null) return;
+        runOnUiThread(() -> live2dWebView.evaluateJavascript(js, null));
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void enableVideoDrag() {
+        if (videoContainer == null) return;
+        videoContainer.setClickable(true); // keep accessibility happy when handling touch
+        videoContainer.setOnTouchListener(new View.OnTouchListener() {
+            float startX;
+            float startY;
+            int startLeft;
+            int startTop;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                View parent = (View) v.getParent();
+                if (parent == null) return false;
+                RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) v.getLayoutParams();
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = event.getRawX();
+                        startY = event.getRawY();
+                        startLeft = lp.leftMargin;
+                        startTop = lp.topMargin;
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = event.getRawX() - startX;
+                        float dy = event.getRawY() - startY;
+                        int newLeft = startLeft + Math.round(dx);
+                        int newTop = startTop + Math.round(dy);
+                        int maxLeft = parent.getWidth() - v.getWidth();
+                        int maxTop = parent.getHeight() - v.getHeight();
+                        lp.leftMargin = clamp(newLeft, 0, Math.max(maxLeft, 0));
+                        lp.topMargin = clamp(newTop, 0, Math.max(maxTop, 0));
+                        lp.rightMargin = 0;
+                        lp.bottomMargin = 0;
+                        v.setLayoutParams(lp);
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        v.performClick(); // accessibility: announce click action even though we drag
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        });
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private void stopVideoMode() {
@@ -1518,6 +1643,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
             public void playStart() {
                 Log.d(TAG, "播放开始");
                 multiModalDialog.sendResponseStarted();
+                triggerLive2DTalkStart();
             }
 
             @Override
@@ -1526,11 +1652,13 @@ public class MultimodalConversationActivity extends AppCompatActivity {
                 if (multiModalDialog != null) {
                     multiModalDialog.sendResponseEnded();
                 }
+                triggerLive2DTalkStop();
             }
 
             @Override
             public void playSoundLevel(int level) {
-                // 音量级别
+                // 实时映射到 Live2D 嘴型
+                updateLive2DMouth(level);
             }
 
             @Override
@@ -1586,6 +1714,16 @@ public class MultimodalConversationActivity extends AppCompatActivity {
 
         if (networkMp3Player != null) {
             networkMp3Player.release();
+        }
+
+        if (live2dWebView != null) {
+            try {
+                live2dWebView.loadUrl("about:blank");
+                live2dWebView.onPause();
+                live2dWebView.destroy();
+            } catch (Exception ignored) {
+            }
+            live2dWebView = null;
         }
 
         CameraManager.getInstance().destroy();
