@@ -1,6 +1,12 @@
 # 技术说明文档
 
-## 1. Live 2D Model
+## 1. 编译
+
+1. 打开Android studio
+
+2. 点击Sync Project with Gradle File.
+
+## 2. Live 2D Model
 
 Model素材来源于Live 2D，链接为[Live 2D](https://www.live2d.com/zh-CHS/learn/sample/)。免费下载模型数据集，在DEMO中使用的模型为`小春`。
 模型文件下载后的格式为：
@@ -51,3 +57,4 @@ PSD文件（划分素材.psd）（导入.psd）
     model.position.set(app.renderer.width / 2 - 300, app.renderer.height * 0.1 + 40); 
 
 ```
+
