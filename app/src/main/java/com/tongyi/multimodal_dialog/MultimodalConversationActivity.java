@@ -318,7 +318,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
         * 添加自定义唤醒词
         * */
         JSONObject wakeWord1 = new JSONObject();
-        wakeWord1.put("name", "小云小云");
+        wakeWord1.put("name", "你好小蕾");
         wakeWord1.put("type", "main");
         kwsWords.put(wakeWord1);
         // 启用唤醒，默认唤醒词为"小云小云"
@@ -683,7 +683,7 @@ public class MultimodalConversationActivity extends AppCompatActivity {
     private void setLogsTextStyled(@NonNull String rawText) {
         // 我：浅色；AI：深色；系统提示（连接成功等）：浅色
         int userColor = ContextCompat.getColor(this, R.color.text_secondary);
-        int aiColor = ContextCompat.getColor(this, R.color.text_primary);
+        int aiColor = Color.WHITE;
         int systemColor = ContextCompat.getColor(this, R.color.text_secondary);
 
         SpannableStringBuilder ssb = new SpannableStringBuilder(rawText);

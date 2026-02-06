@@ -6,7 +6,8 @@
     <title>Live2D</title>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-        #stage { width: 100%; height: 100%; }
+        /* #stage { width: 100%; height: 100%; } */
+        #stage { width: 100%; height: 100%; position: relative; background: url('file:///android_asset/live2d/img/cyberpod_bg.png');background-size: cover; background-repeat: no-repeat; background-position: center;}
         #log { position: absolute; top: 8px; left: 8px; right: 8px; padding: 6px 8px; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; font-family: monospace; border-radius: 6px; pointer-events: none; }
     </style>
 </head>
@@ -55,11 +56,14 @@
             PIXI.live2d.Live2DModel.from(modelUrl).then(model => {
                 log('Model loaded');
                 // 隐藏日志
-                hideLog();
-                model.scale.set(0.05);
+                //hideLog();
+                model.scale.set(0.15);
                 model.anchor.set(0.5, 0.5);
-                model.position.set(app.renderer.width / 2 - 300, app.renderer.height * 0.1 + 40);
+                model.position.set(app.renderer.width / 2 - 340, app.renderer.height * 0.1 + 210);
+                //log('width: ' + app.renderer.width + ', height: ' + app.renderer.height + '\n' + 'modelposition: ' + model.position.x + ', ' + model.position.y);
                 app.stage.addChild(model);
+                const b = model.getBounds();
+                log('modelCenter: ' + (b.x) + ', ' + (b.y));
 
                 // Expose helpers for native side: lip-sync and talk motion
                 let mouthTarget = 0;
@@ -84,7 +88,9 @@
 
                 window.addEventListener('resize', () => {
                     app.renderer.resize(window.innerWidth, window.innerHeight);
-                    model.position.set(app.renderer.width / 2 - 300, app.renderer.height * 0.1 + 40);
+                    // 坐标轴中心在屏幕左上角，width减法模型向左偏移，height加法向下偏移
+                    log('resize');
+                    model.position.set(app.renderer.width / 2 - 250, app.renderer.height * 0.1 + 490);
                 });
 
             }).catch(err => {
